@@ -1,10 +1,8 @@
 const t = typeof window !== 'undefined' && window.__t ? window.__t : (k) => k;
 
 const API = {
-  all: '/api/all-virtual',
-  penalty: '/api/penalty',
   fifa: '/api/fifa-penalty',
-  pes: '/api/pes-penalty',
+  all: '/api/all-virtual',
   match: (id) => `/api/match/${id}`,
 };
 
@@ -15,9 +13,8 @@ function translateOutcome(outcome) {
   return outcome;
 }
 
-let currentTab = 'all';
 let allData = [];
-let penaltyData = null;
+let penaltyData = [];
 
 const $ = (id) => document.getElementById(id);
 const loading = $('loading');
@@ -38,16 +35,15 @@ function showError(show) {
 async function loadData() {
   showLoading(true);
   try {
-    const [allRes, penaltyRes] = await Promise.all([
+    const [fifaRes, allRes] = await Promise.all([
+      fetch(API.fifa),
       fetch(API.all),
-      fetch(API.penalty),
     ]);
-
+    const fifaJson = await fifaRes.json();
     const allJson = await allRes.json();
-    const penaltyJson = await penaltyRes.json();
 
+    if (fifaJson.success) penaltyData = fifaJson.data || [];
     if (allJson.success) allData = allJson.data || [];
-    if (penaltyJson.success) penaltyData = penaltyJson.data;
 
     render();
   } catch (err) {
@@ -58,20 +54,8 @@ async function loadData() {
   }
 }
 
-function getDataForTab() {
-  if (currentTab === 'fifa') {
-    return (penaltyData?.fifa || []).length
-      ? penaltyData.fifa
-      : allData.filter((m) => m.sport === 'FIFA');
-  }
-  if (currentTab === 'pes') {
-    return (penaltyData?.pes || []).length
-      ? penaltyData.pes
-      : allData.filter((m) => m.sport === 'PES');
-  }
-  const fifa = penaltyData?.fifa || allData.filter((m) => m.sport === 'FIFA');
-  const pes = penaltyData?.pes || allData.filter((m) => m.sport === 'PES');
-  return [...fifa, ...pes];
+function getData() {
+  return penaltyData.length > 0 ? penaltyData : allData;
 }
 
 function groupByLeague(data) {
@@ -114,10 +98,10 @@ function renderStatusBar(m) {
   return `
     <div class="status-bar ${statusClass}">
       <span class="status-dot"></span>
-      <span>Début: ${start}</span>
+      <span>${t('start')}: ${start}</span>
       <span class="separator">→</span>
-      <span>Fin: ${end}</span>
-      <span class="status-label">${finished ? 'Terminé' : started ? 'En cours' : 'À venir'}</span>
+      <span>${t('end')}: ${end}</span>
+      <span class="status-label">${finished ? t('status_finished') : started ? t('status_live') : t('status_upcoming')}</span>
     </div>
   `;
 }
@@ -133,9 +117,8 @@ function renderMatch(m) {
   const predLabel = favorite ? (favorite.team || translateOutcome(favorite.outcome)) : '';
 
   return `
-    <article class="match-card" data-sport="${(m.sport || 'FIFA').toLowerCase()}">
+    <article class="match-card">
       <div class="match-header">
-        <span class="sport-badge ${(m.sport || 'FIFA').toLowerCase()}">${m.sport || 'FIFA'}</span>
         <span class="status-text">${formatStatus(m.status)}</span>
       </div>
       ${renderStatusBar(m)}
@@ -150,15 +133,15 @@ function renderMatch(m) {
       </div>
       <div class="odds-row">
         <div class="odd ${isWin1 ? 'predicted' : ''}">
-          <div class="label">1</div>
+          <div class="label">${t('market_1')}</div>
           <div>${odds.win1 != null ? odds.win1.toFixed(2) : '-'}</div>
         </div>
         <div class="odd ${isDraw ? 'predicted' : ''}">
-          <div class="label">X</div>
+          <div class="label">${t('market_x')}</div>
           <div>${odds.draw != null ? odds.draw.toFixed(2) : '-'}</div>
         </div>
         <div class="odd ${isWin2 ? 'predicted' : ''}">
-          <div class="label">2</div>
+          <div class="label">${t('market_2')}</div>
           <div>${odds.win2 != null ? odds.win2.toFixed(2) : '-'}</div>
         </div>
       </div>
@@ -166,29 +149,27 @@ function renderMatch(m) {
         favorite
           ? `
       <div class="prediction-box">
-        <span><strong>Prédiction :</strong> ${favorite.team || favorite.outcome}</span>
-        <span class="confidence">Confiance: ${favorite.confidence || 0}%</span>
-        <span class="confidence">Cote: ${favorite.odds?.toFixed(2) || '-'}</span>
+        <span><strong>${t('prediction')} :</strong> ${predLabel}</span>
+        <span class="confidence">${t('confidence')}: ${favorite.confidence || 0}%</span>
+        <span class="confidence">${t('odds')}: ${favorite.odds?.toFixed(2) || '-'}</span>
       </div>
       `
           : ''
       }
-      <a href="/match?id=${m.id}" class="btn-details">Détails</a>
+      <a href="/match?id=${m.id}" class="btn-details">${t('details')}</a>
     </article>
   `;
 }
 
 function render() {
-  const data = getDataForTab();
+  const data = getData();
   const byLeague = groupByLeague(data);
 
   if (!data || data.length === 0) {
-    const label = currentTab === 'fifa' ? t('tab_fifa') : currentTab === 'pes' ? t('tab_pes') : '';
-    const hint = currentTab === 'pes' ? t('pes_unavailable') : t('try_later');
     matches.innerHTML = `
       <div class="empty-state">
-        <p>${t('no_match')}${label ? ' ' + label : ''} ${t('no_match_found')}</p>
-        <p>${hint}</p>
+        <p>${t('no_match_fifa')}</p>
+        <p>${t('try_later')}</p>
       </div>
     `;
   } else {
@@ -204,30 +185,11 @@ function render() {
       .join('');
   }
 
-  const totalPenalty = (penaltyData?.fifa?.length || 0) + (penaltyData?.pes?.length || 0);
-  fallbackInfo.style.display = totalPenalty === 0 && allData.length > 0 ? 'block' : 'none';
-  if (fallbackInfo.style.display === 'block') fallbackInfo.textContent = t('fallback_no_penalty');
+  fallbackInfo.style.display = penaltyData.length === 0 && allData.length > 0 ? 'block' : 'none';
+  if (fallbackInfo.style.display === 'block') fallbackInfo.textContent = t('fallback_fifa');
 }
 
-document.querySelectorAll('.tab').forEach((btn) => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.tab').forEach((t) => t.classList.remove('active'));
-    btn.classList.add('active');
-    currentTab = btn.dataset.tab;
-    render();
-  });
-});
-
 function applyTranslations() {
-  const nav = document.getElementById('navTabs');
-  if (nav) {
-    const allBtn = nav.querySelector('[data-tab="all"]');
-    const fifaBtn = nav.querySelector('[data-tab="fifa"]');
-    const pesBtn = nav.querySelector('[data-tab="pes"]');
-    if (allBtn) allBtn.textContent = t('tab_all');
-    if (fifaBtn) fifaBtn.textContent = t('tab_fifa');
-    if (pesBtn) pesBtn.textContent = t('tab_pes');
-  }
   const loadingText = document.getElementById('loadingText');
   if (loadingText) loadingText.textContent = t('loading');
   const errorText = document.getElementById('errorText');
@@ -236,10 +198,6 @@ function applyTranslations() {
   if (retryBtn) retryBtn.textContent = t('retry');
   const footerDisclaimer = document.getElementById('footerDisclaimer');
   if (footerDisclaimer) footerDisclaimer.textContent = t('footer_disclaimer');
-  const footerHome = document.getElementById('footerHome');
-  if (footerHome) footerHome.textContent = t('home');
-  const footerList = document.getElementById('footerList');
-  if (footerList) footerList.textContent = t('list_matches');
 }
 
 applyTranslations();

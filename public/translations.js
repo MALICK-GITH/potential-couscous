@@ -61,6 +61,10 @@ const translations = {
     footer_disclaimer: 'Données issues de l\'API 1xbet • Prédictions indicatives uniquement',
     list_matches: 'Liste des matches',
     match_detail: 'Détails du match',
+    fallback_no_penalty: 'Peu ou pas de matches "Penalty" trouvés. Affichage de tous les matchs virtuels FIFA et PES.',
+    fallback_fifa: 'Peu ou pas de matches "Penalty" trouvés. Affichage de tous les matchs virtuels FIFA.',
+    api_no_data: 'L\'API 1xbet ne renvoie pas de données (hébergeur ou connexion).',
+    no_match_fifa: 'Aucun match FIFA Penalty trouvé.',
   },
   en: {
     market_1: '1',
@@ -117,6 +121,9 @@ const translations = {
     list_matches: 'Match list',
     match_detail: 'Match details',
     fallback_no_penalty: 'Few or no "Penalty" matches found. Showing all FIFA and PES virtual matches.',
+    fallback_fifa: 'Few or no "Penalty" matches found. Showing all FIFA virtual matches.',
+    api_no_data: '1xbet API is not returning data (host or connection).',
+    no_match_fifa: 'No FIFA Penalty match found.',
   },
 };
 

@@ -309,6 +309,22 @@ main {
   margin-top: 0.5rem;
 }
 
+.sport-block {
+  margin-bottom: 2.5rem;
+}
+
+.sport-block-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 1rem;
+  padding: 0.5rem 0;
+  border-bottom: 2px solid var(--border);
+}
+
+.sport-block[data-sport="fifa"] .sport-block-title { color: var(--accent); }
+.sport-block[data-sport="pes"] .sport-block-title { color: var(--accent-green); }
+
 .league-group {
   margin-bottom: 2rem;
 }
