@@ -220,14 +220,14 @@ function renderTrendsMini(odds, value, m) {
 }
 
 function renderAlternativePredictions(alt) {
-  const decision = alt.decision || 'Aucune prédiction alternative.';
+  const decision = alt.decision || tr('alt_no_decision');
   const options = alt.options || [];
   const paris = alt.parisAlternatifs || [];
 
   $('alternativeDecision').innerHTML = `<div class="alt-decision-text">${decision}</div>`;
 
   if (options.length === 0) {
-    $('alternativeOptions').innerHTML = '<p class="alt-empty">Aucune option alternative prédite.</p>';
+    $('alternativeOptions').innerHTML = '<p class="alt-empty">' + tr('alt_no_option') + '</p>';
   } else {
     $('alternativeOptions').innerHTML = options
       .map((opt, i) => `
@@ -243,7 +243,7 @@ function renderAlternativePredictions(alt) {
 
   if (paris.length > 0) {
     $('alternativeAllBets').innerHTML = `
-      <div class="alt-all-title">Paris alternatifs disponibles</div>
+      <div class="alt-all-title">${tr('alt_available')}</div>
       <div class="alt-all-list">${paris.map((p) => `<span class="alt-bet-chip">${p.nom} <strong>${p.cote}</strong></span>`).join('')}</div>
     `;
   } else {
@@ -270,7 +270,7 @@ function renderUltimateOptions(ultimate, m) {
     <div class="ultimate-option" data-key="${opt.key}" data-odds="${opt.odds}" data-label="${(opt.team || opt.outcome).replace(/"/g, '&quot;')}">
       <span>
         ${opt.team || opt.outcome}
-        ${opt === recommended ? '<span class="recommended">Recommandé</span>' : ''}
+        ${opt === recommended ? '<span class="recommended">' + tr('recommended') + '</span>' : ''}
       </span>
       <span>
         <span class="odds">${opt.odds?.toFixed(2)}</span>
@@ -302,7 +302,27 @@ function renderUltimateOptions(ultimate, m) {
   }
 }
 
+function applyPageTranslations() {
+  const map = {
+    i18nVisualisations: 'visualisations',
+    i18nProb1x2: 'prob_1x2',
+    i18nMatchState: 'match_state',
+    i18nOddsTrends: 'odds_trends',
+    i18nAltBets: 'alt_bets',
+    i18nAltDesc: 'alt_desc',
+    i18nUltimateBet: 'ultimate_bet',
+    i18nUltimateDesc: 'ultimate_desc',
+    i18nSelectedBetLabel: 'selected_bet_label',
+    i18nOddsLabel: 'odds_label',
+  };
+  Object.entries(map).forEach(([id, key]) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = tr(key);
+  });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+  applyPageTranslations();
   loadMatch();
   setInterval(loadMatch, REFRESH_INTERVAL);
 });

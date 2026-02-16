@@ -65,6 +65,13 @@ const translations = {
     fallback_fifa: 'Peu ou pas de matches "Penalty" trouvés. Affichage de tous les matchs virtuels FIFA.',
     api_no_data: 'L\'API 1xbet ne renvoie pas de données (hébergeur ou connexion).',
     no_match_fifa: 'Aucun match FIFA Penalty trouvé.',
+    // Options de pari (page détail)
+    alt_no_decision: 'Aucune prédiction alternative.',
+    alt_no_option: 'Aucune option alternative prédite.',
+    alt_available: 'Paris alternatifs disponibles',
+    visualisations: 'Visualisations',
+    selected_bet_label: 'Votre pari :',
+    odds_label: 'Cote :',
   },
   en: {
     market_1: '1',
@@ -124,6 +131,12 @@ const translations = {
     fallback_fifa: 'Few or no "Penalty" matches found. Showing all FIFA virtual matches.',
     api_no_data: '1xbet API is not returning data (host or connection).',
     no_match_fifa: 'No FIFA Penalty match found.',
+    alt_no_decision: 'No alternative prediction.',
+    alt_no_option: 'No alternative option predicted.',
+    alt_available: 'Alternative bets available',
+    visualisations: 'Visualizations',
+    selected_bet_label: 'Your bet:',
+    odds_label: 'Odds:',
   },
 };
 
