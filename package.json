@@ -1,17 +1,22 @@
 {
-  "name": "penalty-predictor",
+  "name": "fifa-virtual-penalty-live",
   "version": "1.0.0",
-  "description": "Prédiction des tirs au but FIFA et PES - Sports virtuels 1xbet",
+  "description": "Site Node.js pour afficher uniquement les matchs FIFA virtuel penalty (1xBet LiveFeed).",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js"
   },
-  "keywords": ["fifa", "pes", "penalty", "prediction", "1xbet", "virtual-sports"],
-  "author": "",
+  "keywords": [
+    "node",
+    "express",
+    "fifa",
+    "virtual",
+    "penalty",
+    "1xbet"
+  ],
   "license": "MIT",
   "dependencies": {
-    "express": "^4.18.2",
-    "node-fetch": "^3.3.2"
+    "express": "^4.21.2"
   }
 }

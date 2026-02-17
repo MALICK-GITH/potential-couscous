@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Generateur Coupon</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sora:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/coupon.css" />
+  </head>
+  <body>
+    <main class="page">
+      <a class="back" href="/">Retour aux matchs</a>
+      <header class="hero">
+        <p class="tag">Coupon Builder</p>
+        <h1>Coupon Optimise</h1>
+        <p>Choisis le nombre de matchs, puis genere ton coupon.</p>
+      </header>
+
+      <section class="controls">
+        <label>
+          <span>Nombre de matchs</span>
+          <input id="sizeInput" type="number" min="1" max="12" value="3" />
+        </label>
+        <label>
+          <span>Ligue</span>
+          <select id="leagueSelect">
+            <option value="all">Toutes les ligues</option>
+          </select>
+        </label>
+        <button id="generateBtn" type="button">Generer Coupon</button>
+      </section>
+
+      <section class="panel" id="result">
+        <p>En attente de generation.</p>
+      </section>
+    </main>
+    <script src="/coupon.js" defer></script>
+  </body>
+  </html>

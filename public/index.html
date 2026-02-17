@@ -1,46 +1,47 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="fr">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Penalty Predictor - FIFA</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
-</head>
-<body>
-  <div class="app system-app">
-    <header class="system-header">
-      <h1>
-        <span class="icon">⚽</span>
-        Penalty Predictor
-      </h1>
-      <p class="subtitle">Prédictions FIFA Penalty – Sports virtuels</p>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FIFA Virtual Penalty Live</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sora:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="bg-grid" aria-hidden="true"></div>
+    <header class="hero">
+      <p class="tag">Live Feed 1xBet</p>
+      <h1>FIFA Virtuel Penalty</h1>
+      <p id="subTitle">Chargement des matchs en cours...</p>
+      <div class="controls">
+        <button id="refreshBtn" type="button">Actualiser</button>
+        <label class="league-filter" for="leagueSelect">
+          <span>Ligue</span>
+          <select id="leagueSelect">
+            <option value="all">Toutes les ligues</option>
+          </select>
+        </label>
+        <a class="coupon-page-link" href="/coupon.html">Page Coupon</a>
+      </div>
     </header>
 
     <main>
-      <div class="loading" id="loading">
-        <div class="spinner"></div>
-        <p id="loadingText">Chargement des matches...</p>
-      </div>
-
-      <div class="error" id="error" style="display:none">
-        <p id="errorText">Erreur de chargement. Vérifiez la connexion et réessayez.</p>
-        <button onclick="loadData()" id="retryBtn">Réessayer</button>
-      </div>
-
+      <section class="stats" id="stats"></section>
       <section class="matches" id="matches"></section>
-
-      <p class="fallback-info" id="fallbackInfo" style="display:none"></p>
+      <p class="empty hidden" id="emptyState">
+        Aucun match FIFA penalty detecte pour le moment.
+      </p>
     </main>
 
-    <footer class="system-footer">
-      <p id="footerDisclaimer">Données issues de l'API 1xbet • Prédictions indicatives uniquement</p>
+    <footer>
+      <small id="updatedAt"></small>
     </footer>
-  </div>
 
-  <script src="translations.js"></script>
-  <script src="app.js"></script>
-</body>
-</html>
+    <script src="/app.js" defer></script>
+  </body>
+  </html>
