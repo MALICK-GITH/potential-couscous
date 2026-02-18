@@ -144,6 +144,37 @@ function localChatFallback(message, context = {}) {
   );
 }
 
+function formatOddForTelegram(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n.toFixed(3) : "-";
+}
+
+function buildTelegramCouponText(payload = {}) {
+  const coupon = Array.isArray(payload.coupon) ? payload.coupon : [];
+  const summary = payload.summary || {};
+  const riskProfile = String(payload.riskProfile || "balanced");
+  const lines = [
+    "COUPON OPTIMISE FC 25",
+    "Source: FC 25 Virtual Predictions",
+    `Profil: ${riskProfile}`,
+    `Selections: ${Number(summary.totalSelections) || coupon.length}`,
+    `Cote combinee: ${formatOddForTelegram(summary.combinedOdd)}`,
+    `Confiance moyenne: ${Number(summary.averageConfidence) || 0}%`,
+    "",
+  ];
+
+  coupon.forEach((pick, index) => {
+    lines.push(`${index + 1}. ${pick.teamHome || "Equipe 1"} vs ${pick.teamAway || "Equipe 2"}`);
+    lines.push(`Ligue: ${pick.league || "Non specifiee"}`);
+    lines.push(`Pari: ${pick.pari || "-"}`);
+    lines.push(`Cote: ${formatOddForTelegram(pick.cote)} | Confiance: ${Number(pick.confiance) || 0}%`);
+    lines.push("");
+  });
+  lines.push("Aucune combinaison n'est garantie gagnante.");
+  lines.push("Signe: SOLITAIRE HACK");
+  return lines.join("\n").slice(0, 3900);
+}
+
 app.get("/api/team-badge", (req, res) => {
   const name = String(req.query.name || "Equipe").trim();
   const initials = initialsFromName(name).slice(0, 2);
@@ -291,6 +322,91 @@ app.post("/api/coupon/validate", async (req, res) => {
     });
   }
 });
+
+async function sendTelegramCouponHandler(req, res) {
+  try {
+    const botToken = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
+    if (!botToken) {
+      return res.status(500).json({
+        success: false,
+        message: "Configuration Telegram manquante (TELEGRAM_BOT_TOKEN).",
+      });
+    }
+
+    const coupon = Array.isArray(req.body?.coupon) ? req.body.coupon : [];
+    if (coupon.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Coupon vide. Genere d'abord un coupon.",
+      });
+    }
+
+    const text = buildTelegramCouponText(req.body || {});
+    let chatId = String(process.env.TELEGRAM_CHANNEL_ID || "").trim();
+
+    if (!chatId) {
+      const updatesRes = await fetch(`https://api.telegram.org/bot${botToken}/getUpdates?limit=30&timeout=1`);
+      const updatesData = await updatesRes.json();
+      if (!updatesRes.ok || !updatesData?.ok) {
+        return res.status(502).json({
+          success: false,
+          message: "Impossible de recuperer le chat Telegram depuis le bot.",
+          error: updatesData?.description || "getUpdates indisponible.",
+        });
+      }
+
+      const updates = Array.isArray(updatesData.result) ? updatesData.result : [];
+      for (let i = updates.length - 1; i >= 0; i -= 1) {
+        const chat = updates[i]?.message?.chat || updates[i]?.channel_post?.chat;
+        if (chat?.id && (chat?.type === "private" || chat?.type === "group" || chat?.type === "supergroup")) {
+          chatId = String(chat.id);
+          break;
+        }
+      }
+
+      if (!chatId) {
+        return res.status(400).json({
+          success: false,
+          message: "Aucun chat detecte. Ecris d'abord un message a ton bot sur Telegram, puis reessaie.",
+        });
+      }
+    }
+
+    const telegramRes = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        disable_web_page_preview: true,
+      }),
+    });
+    const telegramData = await telegramRes.json();
+    if (!telegramRes.ok || !telegramData?.ok) {
+      return res.status(502).json({
+        success: false,
+        message: "Echec envoi Telegram.",
+        error: telegramData?.description || "API Telegram indisponible.",
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Coupon envoye sur Telegram.",
+      telegramMessageId: telegramData?.result?.message_id || null,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Impossible d'envoyer le coupon sur Telegram.",
+      error: error.message,
+    });
+  }
+}
+
+app.post("/api/coupon/send-telegram", sendTelegramCouponHandler);
+app.post("/api/telegram/send-coupon", sendTelegramCouponHandler);
+app.post("/api/send-telegram", sendTelegramCouponHandler);
 
 app.post("/api/chat", async (req, res) => {
   try {

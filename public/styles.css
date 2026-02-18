@@ -228,6 +228,34 @@ footer {
   gap: 0.95rem;
 }
 
+.odd-alerts {
+  position: fixed;
+  right: 14px;
+  top: 14px;
+  z-index: 9998;
+  display: grid;
+  gap: 0.45rem;
+  width: min(360px, calc(100vw - 26px));
+  pointer-events: none;
+}
+
+.odd-alert-card {
+  border: 1px solid rgba(255, 209, 102, 0.55);
+  border-radius: 10px;
+  background: linear-gradient(110deg, rgba(255, 209, 102, 0.2), rgba(255, 95, 121, 0.22));
+  color: #ffeacc;
+  font-size: 0.82rem;
+  padding: 0.56rem 0.64rem;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.32);
+  animation: oddAlertIn 0.25s ease;
+}
+
+.odd-alert-card.out {
+  opacity: 0;
+  transform: translateY(-8px);
+  transition: all 0.38s ease;
+}
+
 .match-card {
   background: linear-gradient(160deg, rgba(13, 22, 43, 0.92), rgba(8, 14, 28, 0.94));
   border: 1px solid var(--line);
@@ -538,6 +566,11 @@ footer {
   100% { transform: scale(1); }
 }
 
+@keyframes oddAlertIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   #refreshBtn::after,
   .coupon-page-link::after,
@@ -545,5 +578,14 @@ footer {
   .match-card {
     animation: none !important;
     transition: none !important;
+  }
+}
+
+@media (max-width: 560px) {
+  .odd-alerts {
+    left: 7px;
+    right: 7px;
+    width: auto;
+    top: 8px;
   }
 }

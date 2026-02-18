@@ -2,6 +2,9 @@ let allMatches = [];
 let currentModeLabel = "";
 let currentMatchMode = "upcoming";
 const previousOddsByMatch = new Map();
+const STRONG_ODD_CHANGE_PERCENT = 9;
+const ODD_ALERT_COOLDOWN_MS = 90 * 1000;
+const oddAlertLastShown = new Map();
 
 function formatTime(unixSeconds) {
   if (!unixSeconds) return "Heure non disponible";
@@ -202,8 +205,27 @@ function diffTrend(previous, next) {
   return diff < 0 ? "odd-up" : "odd-down";
 }
 
+function changePercent(previous, next) {
+  if (!Number.isFinite(previous) || !Number.isFinite(next) || previous <= 0) return null;
+  return Math.abs(((next - previous) / previous) * 100);
+}
+
+function pushOddAlert(message) {
+  const wrap = document.getElementById("oddAlerts");
+  if (!wrap) return;
+  const card = document.createElement("article");
+  card.className = "odd-alert-card";
+  card.textContent = message;
+  wrap.appendChild(card);
+  setTimeout(() => {
+    card.classList.add("out");
+    setTimeout(() => card.remove(), 420);
+  }, 3800);
+}
+
 function enrichWithTrend(matches) {
-  return (matches || []).map((match) => {
+  const alerts = [];
+  const enriched = (matches || []).map((match) => {
     const key = String(match.id);
     const prev = previousOddsByMatch.get(key) || {};
     const next = {
@@ -212,6 +234,27 @@ function enrichWithTrend(matches) {
       away: normalizeOdd(match?.odds1x2?.away),
     };
     previousOddsByMatch.set(key, next);
+
+    const checks = [
+      ["1", prev.home, next.home],
+      ["X", prev.draw, next.draw],
+      ["2", prev.away, next.away],
+    ];
+
+    for (const [label, oldOdd, newOdd] of checks) {
+      const pct = changePercent(oldOdd, newOdd);
+      if (pct == null || pct < STRONG_ODD_CHANGE_PERCENT) continue;
+      const dir = newOdd < oldOdd ? "baisse" : "hausse";
+      const alertKey = `${key}:${label}:${dir}`;
+      const now = Date.now();
+      const last = oddAlertLastShown.get(alertKey) || 0;
+      if (now - last < ODD_ALERT_COOLDOWN_MS) continue;
+      oddAlertLastShown.set(alertKey, now);
+      alerts.push(
+        `${match.teamHome} vs ${match.teamAway}: cote ${label} en ${dir} forte (${pct.toFixed(1)}%)`
+      );
+    }
+
     return {
       ...match,
       trend: {
@@ -221,6 +264,10 @@ function enrichWithTrend(matches) {
       },
     };
   });
+  if (alerts.length) {
+    setTimeout(() => alerts.forEach((msg) => pushOddAlert(msg)), 120);
+  }
+  return enriched;
 }
 
 function renderMatches() {

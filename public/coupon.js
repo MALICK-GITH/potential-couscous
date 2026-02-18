@@ -114,7 +114,7 @@ function renderHistory() {
     .map(
       (x, i) => `
       <li>
-        <strong>${i + 1}. ${x.type === "validation" ? "Validation" : "Coupon"} - ${new Date(x.at).toLocaleString("fr-FR")}</strong>
+        <strong>${i + 1}. ${x.type === "validation" ? "Validation" : x.type === "telegram" ? "Telegram" : "Coupon"} - ${new Date(x.at).toLocaleString("fr-FR")}</strong>
         <span>${x.note}</span>
       </li>
     `
@@ -194,6 +194,13 @@ function setResultHtml(html) {
   if (el) el.innerHTML = html;
 }
 
+function updateSendButtonState() {
+  const btn = document.getElementById("sendTelegramBtn");
+  if (!btn) return;
+  const enabled = Boolean(lastCouponData && Array.isArray(lastCouponData.coupon) && lastCouponData.coupon.length > 0);
+  btn.disabled = !enabled;
+}
+
 async function loadLeagues() {
   try {
     const res = await fetch("/api/matches", { cache: "no-store" });
@@ -217,6 +224,7 @@ async function loadLeagues() {
 function renderCoupon(data) {
   lastCouponData = data;
   const picks = Array.isArray(data?.coupon) ? data.coupon : [];
+  updateSendButtonState();
   if (!picks.length) {
     setResultHtml(`
       <h3>Coupon Optimise</h3>
@@ -306,6 +314,52 @@ function renderValidation(report) {
     at: new Date().toISOString(),
     note: `${statusLabel} | total ${report.summary?.total ?? 0} | a corriger ${report.summary?.toFix ?? 0}`,
   });
+}
+
+async function sendCouponToTelegram() {
+  const panel = document.getElementById("validation");
+  if (!lastCouponData || !Array.isArray(lastCouponData.coupon) || lastCouponData.coupon.length === 0) {
+    if (panel) panel.innerHTML = "<p>Genere d'abord un coupon avant envoi Telegram.</p>";
+    return;
+  }
+
+  if (panel) panel.innerHTML = "<p>Envoi Telegram en cours...</p>";
+
+  try {
+    const payload = {
+      coupon: lastCouponData.coupon,
+      summary: lastCouponData.summary || {},
+      riskProfile: lastCouponData.riskProfile || "balanced",
+    };
+    const res = await fetch("/api/coupon/send-telegram", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await readJsonSafe(res);
+    if (!res.ok || !data.success) {
+      const rawMsg = data.error || data.message || "Erreur envoi Telegram";
+      if (String(rawMsg).toLowerCase().includes("route api introuvable")) {
+        throw new Error("Le serveur actif est ancien. Redemarre npm start puis recharge la page.");
+      }
+      throw new Error(rawMsg);
+    }
+
+    if (panel) {
+      panel.innerHTML = `
+        <h3>Envoi Telegram</h3>
+        <p class="ticket-status ticket-ok">ENVOI REUSSI</p>
+        <p>${data.message || "Coupon envoye dans ton canal Telegram."}</p>
+      `;
+    }
+    addHistoryEntry({
+      type: "telegram",
+      at: new Date().toISOString(),
+      note: `Coupon envoye Telegram | ${lastCouponData.summary?.totalSelections ?? 0} selections`,
+    });
+  } catch (error) {
+    if (panel) panel.innerHTML = `<p>Erreur Telegram: ${error.message}</p>`;
+  }
 }
 
 async function generateCoupon() {
@@ -469,6 +523,7 @@ async function validateTicket() {
 
 const generateBtn = document.getElementById("generateBtn");
 const validateBtn = document.getElementById("validateBtn");
+const sendTelegramBtn = document.getElementById("sendTelegramBtn");
 
 if (generateBtn) generateBtn.addEventListener("click", generateCoupon);
 if (validateBtn) {
@@ -478,6 +533,14 @@ if (validateBtn) {
     validateTicket();
   });
 }
+if (sendTelegramBtn) {
+  sendTelegramBtn.addEventListener("click", sendCouponToTelegram);
+  sendTelegramBtn.addEventListener("touchend", (e) => {
+    e.preventDefault();
+    sendCouponToTelegram();
+  });
+}
 
 loadLeagues();
 renderHistory();
+updateSendButtonState();

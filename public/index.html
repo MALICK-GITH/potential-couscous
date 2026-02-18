@@ -11,6 +11,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/signature.css" />
     <link rel="stylesheet" href="/chat-widget.css" />
   </head>
   <body>
@@ -29,6 +30,7 @@
         </label>
         <a class="coupon-page-link" href="/coupon.html">Page Coupon</a>
         <a class="coupon-page-link" href="/about.html">A propos du createur</a>
+        <a class="coupon-page-link" href="/developpeur.html">Page Developpeur</a>
       </div>
     </header>
 
@@ -40,6 +42,7 @@
         <button class="match-mode" type="button" data-mode="finished">Termines</button>
       </section>
       <section class="matches" id="matches"></section>
+      <div class="odd-alerts" id="oddAlerts" aria-live="polite"></div>
       <p class="empty hidden" id="emptyState">
         Aucun match FIFA penalty detecte pour le moment.
       </p>
@@ -47,6 +50,7 @@
 
     <footer>
       <small id="updatedAt"></small>
+      <div class="site-signature">Signe par <strong>SOLITAIRE HACK</strong></div>
     </footer>
 
     <script src="/app.js" defer></script>

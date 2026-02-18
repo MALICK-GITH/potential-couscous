@@ -1,0 +1,14 @@
+.site-signature {
+  margin-top: 1rem;
+  text-align: center;
+  color: #b7c9e7;
+  font-size: 0.82rem;
+  opacity: 0.95;
+}
+
+.site-signature strong {
+  color: #ffffff;
+  font-family: "Chakra Petch", sans-serif;
+  letter-spacing: 0.04em;
+}
+

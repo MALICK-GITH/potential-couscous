@@ -102,13 +102,14 @@ h1 {
 
 .actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: 0.55rem;
   align-items: end;
 }
 
 #generateBtn,
-#validateBtn {
+#validateBtn,
+#sendTelegramBtn {
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 10px;
   padding: 0.56rem 0.82rem;
@@ -129,11 +130,18 @@ h1 {
   background: linear-gradient(90deg, #7dffad, #c5ffd8);
 }
 
+#sendTelegramBtn {
+  color: #051120;
+  background: linear-gradient(90deg, #ffd27a, #ffe8b2);
+}
+
 #generateBtn:active,
-#validateBtn:active { transform: translateY(1px); }
+#validateBtn:active,
+#sendTelegramBtn:active { transform: translateY(1px); }
 
 #generateBtn::after,
-#validateBtn::after {
+#validateBtn::after,
+#sendTelegramBtn::after {
   content: "";
   position: absolute;
   top: -120%;
@@ -143,6 +151,11 @@ h1 {
   background: rgba(255, 255, 255, 0.45);
   transform: rotate(18deg);
   animation: couponBtnShine 3.6s linear infinite;
+}
+
+#sendTelegramBtn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .panel h3 {
