@@ -1,13 +1,15 @@
 const AUTO_REFRESH_SECONDS = 60;
 const DRIFT_THRESHOLD_PERCENT = 8;
 
-let pulseChart = null;
+let radarChart = null;
+let flowChart = null;
 let currentMatchId = null;
 let refreshIntervalId = null;
 let countdownIntervalId = null;
 let countdown = AUTO_REFRESH_SECONDS;
 let previousOdds = null;
 let loading = false;
+const IS_MOBILE = window.matchMedia("(max-width: 760px)").matches;
 
 function qs(name) {
   return new URLSearchParams(window.location.search).get(name);
@@ -28,6 +30,10 @@ function chartTextColor() {
 
 function chartGridColor() {
   return "rgba(255,255,255,0.12)";
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
 }
 
 function updateRefreshBadge() {
@@ -170,55 +176,143 @@ function renderMarkets(markets) {
   el.innerHTML = `<h2>Marches Analyses</h2><ul>${li || "<li>Aucun marche</li>"}</ul>`;
 }
 
-function renderPulseChart(data) {
+function computeMatchModel(data) {
   const match = data.match || {};
   const prediction = data.prediction || {};
   const bots = Object.values(prediction.bots || {});
   const probs = impliedProbabilities(match.odds1x2);
+
   const avgBotConfidence =
     bots.length > 0
       ? Number((bots.reduce((acc, b) => acc + toNumber(b.confiance_globale, 0), 0) / bots.length).toFixed(2))
       : 0;
   const masterConfidence = toNumber(prediction?.maitre?.decision_finale?.confiance_numerique, 0);
 
-  const labels = ["Prob 1", "Prob X", "Prob 2", "Conf Bots Moy", "Conf Maitre"];
-  const probLine = [probs.home, probs.draw, probs.away, avgBotConfidence, masterConfidence];
-  const oddBars = [
-    toNumber(match.odds1x2?.home, 0),
-    toNumber(match.odds1x2?.draw, 0),
-    toNumber(match.odds1x2?.away, 0),
-    null,
-    null,
+  const marketCount = Array.isArray(data.bettingMarkets) ? data.bettingMarkets.length : 0;
+  const odds = extractOdds(match);
+  const oddsMean = ((odds.home || 0) + (odds.draw || 0) + (odds.away || 0)) / 3 || 1;
+  const volatility = previousOdds
+    ? Number(
+        (
+          (Math.abs(odds.home - previousOdds.home) +
+            Math.abs(odds.draw - previousOdds.draw) +
+            Math.abs(odds.away - previousOdds.away)) /
+          3
+        ).toFixed(3)
+      )
+    : 0;
+
+  const homePower = clamp(probs.home * 0.52 + masterConfidence * 0.22 + avgBotConfidence * 0.16, 8, 96);
+  const awayPower = clamp(probs.away * 0.52 + (100 - masterConfidence) * 0.22 + avgBotConfidence * 0.16, 8, 96);
+  const drawGrip = clamp(probs.draw * 1.35 + (odds.draw < 4 ? 8 : 0), 4, 65);
+  const valuePulse = clamp((marketCount / 160) * 100 + (100 / oddsMean) * 8, 5, 100);
+  const driftPulse = clamp(volatility * 100, 0, 100);
+
+  const axis = ["Attaque", "Controle", "Forme", "Precision", "Discipline", "Momentum"];
+  const homeProfile = [
+    clamp(homePower * 0.94, 8, 99),
+    clamp(homePower * 0.87 + drawGrip * 0.1, 8, 99),
+    clamp(avgBotConfidence * 0.95, 8, 99),
+    clamp((100 / Math.max(1.05, odds.home)) * 1.2, 8, 99),
+    clamp(72 - driftPulse * 0.28 + probs.home * 0.24, 8, 99),
+    clamp(homePower - driftPulse * 0.42 + (masterConfidence - 50) * 0.35, 8, 99),
+  ];
+  const awayProfile = [
+    clamp(awayPower * 0.94, 8, 99),
+    clamp(awayPower * 0.87 + drawGrip * 0.1, 8, 99),
+    clamp((100 - avgBotConfidence) * 0.4 + 44, 8, 99),
+    clamp((100 / Math.max(1.05, odds.away)) * 1.2, 8, 99),
+    clamp(72 - driftPulse * 0.28 + probs.away * 0.24, 8, 99),
+    clamp(awayPower - driftPulse * 0.42 + (50 - masterConfidence) * 0.35, 8, 99),
   ];
 
-  const ctx = document.getElementById("chartPulse");
-  if (!ctx || !window.Chart) return;
-  if (pulseChart) {
-    try {
-      pulseChart.destroy();
-    } catch {}
+  const timeline = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90];
+  const confFactor = (avgBotConfidence + masterConfidence) / 200;
+  const waveAmp = clamp(6 + driftPulse * 0.08 + confFactor * 5, 4, 18);
+  const homeFlow = timeline.map((m) =>
+    clamp(
+      probs.home + Math.sin((m / 90) * Math.PI * 2) * waveAmp + (m > 45 ? 2.2 : 0) + (masterConfidence - 50) * 0.05,
+      3,
+      93
+    )
+  );
+  const awayFlow = timeline.map((m) =>
+    clamp(
+      probs.away + Math.cos((m / 90) * Math.PI * 1.7) * waveAmp + (m > 60 ? 1.8 : 0) + (50 - masterConfidence) * 0.05,
+      3,
+      93
+    )
+  );
+  const drawFlow = timeline.map((_, i) => clamp(100 - homeFlow[i] - awayFlow[i], 2, 45));
+
+  return {
+    axis,
+    homeProfile,
+    awayProfile,
+    timeline,
+    homeFlow,
+    awayFlow,
+    drawFlow,
+    kpis: {
+      homeWin: probs.home,
+      awayWin: probs.away,
+      valuePulse,
+      driftPulse,
+    },
+  };
+}
+
+function renderKpis(model) {
+  const el = document.getElementById("kpiGrid");
+  if (!el) return;
+  el.innerHTML = `
+    <div class="kpi"><small>Win Home</small><strong>${model.kpis.homeWin.toFixed(1)}%</strong></div>
+    <div class="kpi"><small>Win Away</small><strong>${model.kpis.awayWin.toFixed(1)}%</strong></div>
+    <div class="kpi"><small>Value Pulse</small><strong>${model.kpis.valuePulse.toFixed(1)}</strong></div>
+    <div class="kpi"><small>Drift Pulse</small><strong>${model.kpis.driftPulse.toFixed(1)}</strong></div>
+  `;
+}
+
+function makeGlowGradient(ctx, colorStart, colorEnd) {
+  const g = ctx.createLinearGradient(0, 0, 0, 340);
+  g.addColorStop(0, colorStart);
+  g.addColorStop(1, colorEnd);
+  return g;
+}
+
+function renderNeuralCharts(data) {
+  const radarCanvas = document.getElementById("chartRadar");
+  const flowCanvas = document.getElementById("chartFlow");
+  if (!radarCanvas || !flowCanvas || !window.Chart) return;
+
+  const model = computeMatchModel(data);
+  renderKpis(model);
+
+  if (radarChart) {
+    try { radarChart.destroy(); } catch {}
+  }
+  if (flowChart) {
+    try { flowChart.destroy(); } catch {}
   }
 
-  pulseChart = new Chart(ctx, {
+  radarChart = new Chart(radarCanvas, {
+    type: "radar",
     data: {
-      labels,
+      labels: model.axis,
       datasets: [
         {
-          type: "line",
-          label: "Indice confiance/probabilite (%)",
-          data: probLine,
-          yAxisID: "yPercent",
-          borderColor: "#55b0e8",
-          backgroundColor: "rgba(85,176,232,0.18)",
-          fill: true,
-          tension: 0.28,
+          label: data.match?.teamHome || "Equipe 1",
+          data: model.homeProfile,
+          borderColor: "#5fd2ff",
+          backgroundColor: "rgba(95, 210, 255, 0.24)",
+          borderWidth: 2,
         },
         {
-          type: "bar",
-          label: "Cotes reelles 1X2",
-          data: oddBars,
-          yAxisID: "yOdds",
-          backgroundColor: ["#ea7166", "#64d18c", "#9a6fd6", "transparent", "transparent"],
+          label: data.match?.teamAway || "Equipe 2",
+          data: model.awayProfile,
+          borderColor: "#ff7b7b",
+          backgroundColor: "rgba(255, 123, 123, 0.2)",
+          borderWidth: 2,
         },
       ],
     },
@@ -226,27 +320,88 @@ function renderPulseChart(data) {
       responsive: true,
       maintainAspectRatio: false,
       scales: {
-        yPercent: {
-          type: "linear",
-          position: "left",
+        r: {
           min: 0,
           max: 100,
-          ticks: { color: chartTextColor() },
+          angleLines: { color: "rgba(255,255,255,0.13)" },
+          grid: { color: "rgba(255,255,255,0.12)" },
+          pointLabels: { color: chartTextColor() },
+          ticks: { display: false },
+        },
+      },
+      plugins: {
+        legend: { labels: { color: chartTextColor() } },
+      },
+    },
+  });
+
+  const flowCtx = flowCanvas.getContext("2d");
+  if (!flowCtx) return;
+  const gradHome = makeGlowGradient(flowCtx, "rgba(83, 206, 255, 0.5)", "rgba(83, 206, 255, 0.02)");
+  const gradAway = makeGlowGradient(flowCtx, "rgba(255, 109, 109, 0.42)", "rgba(255, 109, 109, 0.01)");
+
+  flowChart = new Chart(flowCanvas, {
+    type: "line",
+    data: {
+      labels: model.timeline,
+      datasets: [
+        {
+          label: `${data.match?.teamHome || "Home"} flux`,
+          data: model.homeFlow,
+          borderColor: "#53ceff",
+          backgroundColor: gradHome,
+          fill: true,
+          pointRadius: IS_MOBILE ? 0 : 2,
+          tension: 0.34,
+          borderWidth: 2.4,
+        },
+        {
+          label: `${data.match?.teamAway || "Away"} flux`,
+          data: model.awayFlow,
+          borderColor: "#ff6d6d",
+          backgroundColor: gradAway,
+          fill: true,
+          pointRadius: IS_MOBILE ? 0 : 2,
+          tension: 0.34,
+          borderWidth: 2.4,
+        },
+        {
+          label: "Zone Nul",
+          data: model.drawFlow,
+          borderColor: "#ffd479",
+          borderDash: [7, 4],
+          fill: false,
+          pointRadius: 0,
+          tension: 0.28,
+          borderWidth: 1.7,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: IS_MOBILE ? false : { duration: 420 },
+      scales: {
+        y: {
+          min: 0,
+          max: 100,
+          ticks: { color: chartTextColor(), callback: (v) => `${v}%` },
           grid: { color: chartGridColor() },
         },
-        yOdds: {
-          type: "linear",
-          position: "right",
-          ticks: { color: chartTextColor() },
-          grid: { drawOnChartArea: false },
-        },
         x: {
-          ticks: { color: chartTextColor() },
+          ticks: { color: chartTextColor(), callback: (v) => `${model.timeline[v]}'` },
           grid: { color: "rgba(255,255,255,0.06)" },
         },
       },
       plugins: {
         legend: { labels: { color: chartTextColor() } },
+        tooltip: {
+          enabled: !IS_MOBILE,
+          callbacks: {
+            title: (items) => `${items?.[0]?.label || 0} min`,
+            label: (ctx) => `${ctx.dataset.label}: ${toNumber(ctx.parsed?.y, 0).toFixed(1)}%`,
+          },
+        },
       },
     },
   });
@@ -265,7 +420,7 @@ async function loadData(trigger = "manual") {
     document.getElementById("sub").textContent = `${match.league} | marche(s): ${data.bettingMarkets?.length || 0}${trigger === "auto" ? " | mise a jour auto" : ""}`;
 
     renderMaster(data.prediction?.maitre?.decision_finale || {}, data.prediction?.maitre?.analyse_bots || {});
-    renderPulseChart(data);
+    renderNeuralCharts(data);
     renderBots(data.prediction?.bots || {});
     renderTop3(data.prediction?.analyse_avancee?.top_3_recommandations || []);
     renderMarkets(data.bettingMarkets || []);
@@ -277,6 +432,7 @@ async function loadData(trigger = "manual") {
   } catch (error) {
     document.getElementById("title").textContent = "Erreur de chargement";
     document.getElementById("sub").textContent = error.message;
+    console.error("Erreur match.js:", error);
   } finally {
     loading = false;
   }

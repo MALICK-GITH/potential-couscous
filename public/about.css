@@ -1,27 +1,29 @@
 :root {
-  --bg: #edf1f6;
-  --panel: #ffffff;
-  --line: #dde5ee;
-  --text: #141922;
-  --muted: #6f7682;
-  --brand: #16b631;
-  --brand-2: #0e8a24;
+  --bg-0: #070b16;
+  --bg-1: #111f3c;
+  --panel: rgba(11, 20, 40, 0.88);
+  --line: rgba(110, 177, 255, 0.3);
+  --text: #edf5ff;
+  --muted: #a6b9d8;
+  --accent: #42f56c;
+  --accent-2: #24d7ff;
 }
 
-* {
-  box-sizing: border-box;
-}
+* { box-sizing: border-box; }
 
 body {
   margin: 0;
   min-height: 100vh;
   font-family: "Sora", sans-serif;
   color: var(--text);
-  background: linear-gradient(180deg, #f8fbff 0%, var(--bg) 100%);
+  background:
+    radial-gradient(circle at 8% 4%, rgba(66, 245, 108, 0.2) 0%, transparent 30%),
+    radial-gradient(circle at 88% 10%, rgba(36, 215, 255, 0.18) 0%, transparent 34%),
+    linear-gradient(145deg, var(--bg-0), var(--bg-1));
 }
 
 .page {
-  max-width: 920px;
+  width: min(920px, 100%);
   margin: 0 auto;
   padding: 1rem;
 }
@@ -29,8 +31,8 @@ body {
 .back {
   display: inline-block;
   text-decoration: none;
-  color: #ffffff;
-  background: linear-gradient(90deg, var(--brand-2), var(--brand));
+  color: #041321;
+  background: linear-gradient(90deg, #42f56c, #24d7ff);
   padding: 0.5rem 0.9rem;
   border-radius: 10px;
   font-family: "Chakra Petch", sans-serif;
@@ -41,16 +43,16 @@ body {
   margin-top: 0.8rem;
   border: 1px solid var(--line);
   border-radius: 16px;
-  background: linear-gradient(120deg, #13b12a, #1ed63a);
-  color: #ffffff;
+  background: linear-gradient(120deg, rgba(66, 245, 108, 0.2), rgba(36, 215, 255, 0.2));
   padding: 1rem 1.1rem;
 }
 
 .tag {
   margin: 0;
-  font-size: 0.75rem;
+  font-size: 0.74rem;
   text-transform: uppercase;
-  letter-spacing: 0.09em;
+  letter-spacing: 0.12em;
+  color: #b9ffd2;
 }
 
 h1 {
@@ -59,10 +61,7 @@ h1 {
   font-size: clamp(1.7rem, 3.3vw, 2.4rem);
 }
 
-.subtitle {
-  margin: 0;
-  opacity: 0.95;
-}
+.subtitle { margin: 0; color: var(--muted); }
 
 .panel {
   margin-top: 1rem;
@@ -80,20 +79,21 @@ h2 {
 
 .list {
   display: grid;
-  gap: 0.65rem;
+  gap: 0.64rem;
 }
 
 .item {
   display: block;
   text-decoration: none;
   color: var(--text);
-  background: #f5f8fc;
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 0.75rem 0.85rem;
   font-weight: 600;
+  background: rgba(16, 28, 53, 0.8);
 }
 
 .item:hover {
-  border-color: #b8c8d9;
+  border-color: rgba(66, 245, 108, 0.5);
+  box-shadow: 0 0 0 1px rgba(66, 245, 108, 0.22);
 }

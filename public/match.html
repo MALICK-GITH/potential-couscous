@@ -11,6 +11,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/match.css" />
+    <link rel="stylesheet" href="/chat-widget.css" />
   </head>
   <body>
     <div class="bg-grid" aria-hidden="true"></div>
@@ -29,10 +30,17 @@
       <section class="panel hidden" id="driftAlert"></section>
       <section class="panel" id="master"></section>
       <section class="panel analytics-panel">
-        <h2>Graphique Site Dedie</h2>
-        <div class="chart-card">
-          <h3>Indice SOLITAIRE Pulse (Donnees Reelles)</h3>
-          <canvas id="chartPulse"></canvas>
+        <h2>Neural Match Engine</h2>
+        <div class="kpi-grid" id="kpiGrid"></div>
+        <div class="chart-grid">
+          <div class="chart-card">
+            <h3>Radar Tactique 360</h3>
+            <canvas id="chartRadar"></canvas>
+          </div>
+          <div class="chart-card">
+            <h3>Flux Dynamique 0-90 min</h3>
+            <canvas id="chartFlow"></canvas>
+          </div>
         </div>
       </section>
       <section class="panel" id="bots"></section>
@@ -41,5 +49,6 @@
     </main>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="/match.js" defer></script>
+    <script src="/chat-widget.js" defer></script>
   </body>
   </html>

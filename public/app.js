@@ -1,5 +1,7 @@
 let allMatches = [];
 let currentModeLabel = "";
+let currentMatchMode = "upcoming";
+const previousOddsByMatch = new Map();
 
 function formatTime(unixSeconds) {
   if (!unixSeconds) return "Heure non disponible";
@@ -79,6 +81,45 @@ function uniqueLeagues(matches) {
   return Array.from(map.values()).sort((a, b) => a.localeCompare(b, "fr"));
 }
 
+function normalizeText(v) {
+  return String(v || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function classifyMatch(match) {
+  const nowSec = Math.floor(Date.now() / 1000);
+  const start = Number(match?.startTimeUnix || 0);
+  const statusCode = Number(match?.statusCode || 0);
+  const info = normalizeText(match?.infoText || "");
+  const status = normalizeText(match?.statusText || "");
+  const phase = normalizeText(match?.phase || "");
+
+  const isFinishedByText =
+    status.includes("termine") ||
+    phase.includes("termine") ||
+    info.includes("termine");
+
+  const isUpcomingBySignal =
+    statusCode === 128 ||
+    info.includes("avant le debut") ||
+    status.includes("debut dans");
+
+  const isLiveByText =
+    phase.includes("mi-temps") ||
+    status.includes("minute") ||
+    status.includes("mi-temps") ||
+    info.includes("1ere mi-temps") ||
+    info.includes("2eme mi-temps");
+
+  if (isFinishedByText) return "finished";
+  if (isUpcomingBySignal && start > nowSec) return "upcoming";
+  if (isLiveByText) return "live";
+  if (start > nowSec) return "upcoming";
+  return "live";
+}
+
 function populateLeagueFilter(matches) {
   const select = document.getElementById("leagueSelect");
   const currentValue = select.value || "all";
@@ -126,9 +167,9 @@ function createMatchCard(match, index) {
       </div>
     </div>
     <div class="odds-row">
-      <div class="odd-box"><span>${match.teamHome}</span><strong>${formatOdd(match.odds1x2?.home)}</strong></div>
-      <div class="odd-box"><span>Nul</span><strong>${formatOdd(match.odds1x2?.draw)}</strong></div>
-      <div class="odd-box"><span>${match.teamAway}</span><strong>${formatOdd(match.odds1x2?.away)}</strong></div>
+      <div class="odd-box ${match.trend?.home || ""}"><span>${match.teamHome}</span><strong>${formatOdd(match.odds1x2?.home)}</strong></div>
+      <div class="odd-box ${match.trend?.draw || ""}"><span>Nul</span><strong>${formatOdd(match.odds1x2?.draw)}</strong></div>
+      <div class="odd-box ${match.trend?.away || ""}"><span>${match.teamAway}</span><strong>${formatOdd(match.odds1x2?.away)}</strong></div>
     </div>
     <p class="kickoff">Coup d'envoi: ${formatTime(match.startTimeUnix)} | ${scoreText(match.score)}</p>
   `;
@@ -149,6 +190,39 @@ function createMatchCard(match, index) {
   return card;
 }
 
+function normalizeOdd(n) {
+  const v = Number(n);
+  return Number.isFinite(v) ? v : null;
+}
+
+function diffTrend(previous, next) {
+  if (!Number.isFinite(previous) || !Number.isFinite(next)) return "";
+  const diff = next - previous;
+  if (Math.abs(diff) < 0.001) return "";
+  return diff < 0 ? "odd-up" : "odd-down";
+}
+
+function enrichWithTrend(matches) {
+  return (matches || []).map((match) => {
+    const key = String(match.id);
+    const prev = previousOddsByMatch.get(key) || {};
+    const next = {
+      home: normalizeOdd(match?.odds1x2?.home),
+      draw: normalizeOdd(match?.odds1x2?.draw),
+      away: normalizeOdd(match?.odds1x2?.away),
+    };
+    previousOddsByMatch.set(key, next);
+    return {
+      ...match,
+      trend: {
+        home: diffTrend(prev.home, next.home),
+        draw: diffTrend(prev.draw, next.draw),
+        away: diffTrend(prev.away, next.away),
+      },
+    };
+  });
+}
+
 function renderMatches() {
   const subTitle = document.getElementById("subTitle");
   const matchesWrap = document.getElementById("matches");
@@ -156,18 +230,33 @@ function renderMatches() {
   const leagueSelect = document.getElementById("leagueSelect");
   const selectedLeague = leagueSelect.value;
 
-  const filtered =
+  const byLeague =
     selectedLeague === "all"
       ? allMatches
       : allMatches.filter((match) => match.league === selectedLeague);
+  const filtered = byLeague.filter((match) => classifyMatch(match) === currentMatchMode);
 
   const leagueLabel = selectedLeague === "all" ? "toutes ligues" : `ligue: ${selectedLeague}`;
-  subTitle.textContent = `${filtered.length} match(s) (${leagueLabel}) - ${currentModeLabel}`;
+  const modeLabel =
+    currentMatchMode === "upcoming" ? "A venir" : currentMatchMode === "live" ? "En cours" : "Termines";
+  subTitle.textContent = `${filtered.length} match(s) (${leagueLabel}, ${modeLabel}) - ${currentModeLabel}`;
 
   matchesWrap.innerHTML = "";
   emptyState.classList.toggle("hidden", filtered.length > 0);
   if (filtered.length > 0) {
     filtered.forEach((match, index) => matchesWrap.appendChild(createMatchCard(match, index)));
+    activateAmbientOddsPulse(matchesWrap);
+  }
+}
+
+function activateAmbientOddsPulse(root) {
+  const boxes = Array.from(root.querySelectorAll(".odd-box"));
+  if (!boxes.length) return;
+  boxes.forEach((b) => b.classList.remove("odd-live"));
+  const sampleCount = Math.min(3, boxes.length);
+  for (let i = 0; i < sampleCount; i += 1) {
+    const idx = Math.floor(Math.random() * boxes.length);
+    boxes[idx].classList.add("odd-live");
   }
 }
 
@@ -186,7 +275,8 @@ async function loadMatches() {
     const data = await res.json();
     if (!res.ok || !data.success) throw new Error(data.error || data.message || "Reponse API invalide");
 
-    allMatches = Array.isArray(data.matches) ? data.matches : [];
+    const rawMatches = Array.isArray(data.matches) ? data.matches : [];
+    allMatches = enrichWithTrend(rawMatches);
     const mode = data.filterMode === "keyword-penalty" ? "filtre mot-cle" : "fallback groupe gr=285";
     currentModeLabel = `mode: ${mode}`;
 
@@ -208,4 +298,15 @@ async function loadMatches() {
 
 document.getElementById("refreshBtn").addEventListener("click", loadMatches);
 document.getElementById("leagueSelect").addEventListener("change", renderMatches);
+document.querySelectorAll(".match-mode").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    currentMatchMode = btn.dataset.mode || "upcoming";
+    document.querySelectorAll(".match-mode").forEach((b) => b.classList.toggle("active", b === btn));
+    renderMatches();
+  });
+});
 loadMatches();
+setInterval(() => {
+  const wrap = document.getElementById("matches");
+  if (wrap) activateAmbientOddsPulse(wrap);
+}, 2300);

@@ -310,7 +310,19 @@ function buildMatchPredictionDetails(event) {
   };
 }
 
-function pickCouponOption(details) {
+function riskConfig(profile = "balanced") {
+  const key = normalizeText(profile);
+  if (key === "safe") {
+    return { minOdd: 1.2, maxOdd: 1.7, minConfidence: 62, slope: 8 };
+  }
+  if (key === "aggressive") {
+    return { minOdd: 1.55, maxOdd: 3.2, minConfidence: 45, slope: 6 };
+  }
+  return { minOdd: 1.3, maxOdd: 2.25, minConfidence: 50, slope: 11 };
+}
+
+function pickCouponOption(details, profile = "balanced") {
+  const cfg = riskConfig(profile);
   const master = details?.prediction?.maitre?.decision_finale || {};
   const top = details?.prediction?.analyse_avancee?.top_3_recommandations || [];
   const marketByName = new Map((details?.bettingMarkets || []).map((m) => [m.nom, m]));
@@ -319,9 +331,9 @@ function pickCouponOption(details) {
   if (
     masterMarket &&
     Number.isFinite(master.confiance_numerique) &&
-    master.confiance_numerique >= 50 &&
-    masterMarket.cote >= 1.25 &&
-    masterMarket.cote <= 2.2
+    master.confiance_numerique >= cfg.minConfidence &&
+    masterMarket.cote >= cfg.minOdd &&
+    masterMarket.cote <= cfg.maxOdd
   ) {
     return {
       pari: masterMarket.nom,
@@ -332,7 +344,7 @@ function pickCouponOption(details) {
   }
 
   const bestTop = top
-    .filter((x) => Number.isFinite(x?.cote) && x.cote >= 1.25 && x.cote <= 2.2)
+    .filter((x) => Number.isFinite(x?.cote) && x.cote >= cfg.minOdd && x.cote <= cfg.maxOdd)
     .sort((a, b) => b.score_composite - a.score_composite)[0];
   if (bestTop) {
     return {
@@ -344,7 +356,7 @@ function pickCouponOption(details) {
   }
 
   const fallback = (details?.bettingMarkets || [])
-    .filter((m) => m.cote >= 1.25 && m.cote <= 2.1)
+    .filter((m) => m.cote >= cfg.minOdd && m.cote <= cfg.maxOdd)
     .sort((a, b) => a.cote - b.cote)[0];
   if (!fallback) return null;
   return {
@@ -359,7 +371,7 @@ function normalizeLeague(value) {
   return normalizeText(String(value || "").trim());
 }
 
-async function getCouponSelection(size = 3, league = "all") {
+async function getCouponSelection(size = 3, league = "all", profile = "balanced") {
   const payload = await fetchLiveFeedRaw();
   const nowSec = Math.floor(Date.now() / 1000);
   const events = Array.isArray(payload?.Value) ? payload.Value : [];
@@ -374,11 +386,13 @@ async function getCouponSelection(size = 3, league = "all") {
   const upcomingEvents = eventsFiltered.filter((e) => isStrictUpcomingEvent(e, nowSec));
 
   const allDetails = upcomingEvents.map((event) => buildMatchPredictionDetails(event));
+  const cfg = riskConfig(profile);
   const candidates = allDetails
     .map((details) => {
-      const option = pickCouponOption(details);
+      const option = pickCouponOption(details, profile);
       if (!option) return null;
-      const safetyScore = option.confiance - Math.abs(option.cote - 1.65) * 11;
+      const anchor = profile === "safe" ? 1.45 : profile === "aggressive" ? 2.2 : 1.7;
+      const safetyScore = option.confiance - Math.abs(option.cote - anchor) * cfg.slope;
       return {
         matchId: details.match.id,
         teamHome: details.match.teamHome,
@@ -410,12 +424,14 @@ async function getCouponSelection(size = 3, league = "all") {
     availableCandidates: candidates.length,
     totalUpcomingMatches: upcomingEvents.length,
     leagueFilter: league || "all",
+    riskProfile: profile,
     coupon: picks,
     summary: {
       totalSelections: picks.length,
       combinedOdd,
       averageConfidence: avgConfidence,
     },
+    riskConfig: cfg,
     warning:
       "Aucune combinaison n'est garantie gagnante. Ce coupon est une optimisation algorithmique.",
   };

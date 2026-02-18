@@ -11,6 +11,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/coupon.css" />
+    <link rel="stylesheet" href="/chat-widget.css" />
   </head>
   <body>
     <main class="page">
@@ -33,6 +34,14 @@
             <option value="all">Toutes les ligues</option>
           </select>
         </label>
+        <label>
+          <span>Profil de risque</span>
+          <select id="riskSelect">
+            <option value="safe">Safe</option>
+            <option value="balanced" selected>Equilibre</option>
+            <option value="aggressive">Agressif</option>
+          </select>
+        </label>
         <div class="actions">
           <button id="generateBtn" type="button">Generer Coupon</button>
           <button id="validateBtn" type="button">Valider Ticket Pro</button>
@@ -45,7 +54,12 @@
       <section class="panel" id="validation">
         <p>Validation ticket en attente.</p>
       </section>
+      <section class="panel" id="historyPanel">
+        <h3>Historique local</h3>
+        <p>Aucun historique pour le moment.</p>
+      </section>
     </main>
     <script src="/coupon.js" defer></script>
+    <script src="/chat-widget.js" defer></script>
   </body>
   </html>

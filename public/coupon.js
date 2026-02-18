@@ -3,6 +3,7 @@ function formatOdd(value) {
 }
 
 let lastCouponData = null;
+const COUPON_HISTORY_KEY = "fc25_coupon_history_v1";
 
 function toNumber(v, fallback = 0) {
   const n = Number(v);
@@ -49,29 +50,91 @@ async function readJsonSafe(response) {
   }
 }
 
-function pickOptionFromDetails(details) {
+function riskConfig(profile = "balanced") {
+  const key = normalizeText(profile);
+  if (key === "safe") return { minOdd: 1.2, maxOdd: 1.7, minConfidence: 62, slope: 8, anchor: 1.45 };
+  if (key === "aggressive") return { minOdd: 1.55, maxOdd: 3.2, minConfidence: 45, slope: 6, anchor: 2.2 };
+  return { minOdd: 1.3, maxOdd: 2.25, minConfidence: 50, slope: 11, anchor: 1.7 };
+}
+
+function pickOptionFromDetails(details, profile = "balanced") {
+  const cfg = riskConfig(profile);
   const master = details?.prediction?.maitre?.decision_finale || {};
   const top = details?.prediction?.analyse_avancee?.top_3_recommandations || [];
   const markets = Array.isArray(details?.bettingMarkets) ? details.bettingMarkets : [];
   const byName = new Map(markets.map((m) => [m.nom, m]));
   const m = byName.get(master.pari_choisi);
-  if (m && Number(master.confiance_numerique) >= 50 && m.cote >= 1.25 && m.cote <= 2.2) {
+  if (m && Number(master.confiance_numerique) >= cfg.minConfidence && m.cote >= cfg.minOdd && m.cote <= cfg.maxOdd) {
     return { pari: m.nom, cote: m.cote, confiance: Number(master.confiance_numerique), source: "MAITRE" };
   }
   const bestTop = top
-    .filter((x) => Number.isFinite(Number(x?.cote)) && Number(x.cote) >= 1.25 && Number(x.cote) <= 2.2)
+    .filter((x) => Number.isFinite(Number(x?.cote)) && Number(x.cote) >= cfg.minOdd && Number(x.cote) <= cfg.maxOdd)
     .sort((a, b) => Number(b.score_composite || 0) - Number(a.score_composite || 0))[0];
   if (bestTop) {
     return { pari: bestTop.pari, cote: Number(bestTop.cote), confiance: Number(bestTop.score_composite || 50), source: "TOP3" };
   }
   const fallback = markets
-    .filter((x) => Number.isFinite(Number(x?.cote)) && Number(x.cote) >= 1.25 && Number(x.cote) <= 2.1)
+    .filter((x) => Number.isFinite(Number(x?.cote)) && Number(x.cote) >= cfg.minOdd && Number(x.cote) <= cfg.maxOdd)
     .sort((a, b) => Number(a.cote) - Number(b.cote))[0];
   if (!fallback) return null;
   return { pari: fallback.nom, cote: Number(fallback.cote), confiance: 45, source: "FALLBACK" };
 }
 
-async function generateCouponFallback(size, league) {
+function readHistory() {
+  try {
+    const raw = localStorage.getItem(COUPON_HISTORY_KEY);
+    const parsed = JSON.parse(raw || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeHistory(items) {
+  localStorage.setItem(COUPON_HISTORY_KEY, JSON.stringify(items.slice(0, 40)));
+}
+
+function addHistoryEntry(entry) {
+  const items = readHistory();
+  items.unshift(entry);
+  writeHistory(items);
+  renderHistory();
+}
+
+function renderHistory() {
+  const panel = document.getElementById("historyPanel");
+  if (!panel) return;
+  const items = readHistory();
+  if (!items.length) {
+    panel.innerHTML = "<h3>Historique local</h3><p>Aucun historique pour le moment.</p>";
+    return;
+  }
+  const rows = items
+    .slice(0, 8)
+    .map(
+      (x, i) => `
+      <li>
+        <strong>${i + 1}. ${x.type === "validation" ? "Validation" : "Coupon"} - ${new Date(x.at).toLocaleString("fr-FR")}</strong>
+        <span>${x.note}</span>
+      </li>
+    `
+    )
+    .join("");
+  panel.innerHTML = `
+    <h3>Historique local</h3>
+    <button id="clearHistoryBtn" type="button">Vider historique</button>
+    <ul class="history-list">${rows}</ul>
+  `;
+  const clearBtn = document.getElementById("clearHistoryBtn");
+  if (clearBtn) {
+    clearBtn.addEventListener("click", () => {
+      writeHistory([]);
+      renderHistory();
+    });
+  }
+}
+
+async function generateCouponFallback(size, league, profile = "balanced") {
   const listRes = await fetch("/api/matches", { cache: "no-store" });
   const listData = await readJsonSafe(listRes);
   if (!listRes.ok || !listData.success) {
@@ -86,15 +149,16 @@ async function generateCouponFallback(size, league) {
   const filtered = filteredByLeague.filter((m) => isStrictUpcomingMatch(m, nowSec));
 
   const sample = filtered.slice(0, 20);
+  const cfg = riskConfig(profile);
   const candidates = [];
   for (const m of sample) {
     try {
       const dRes = await fetch(`/api/matches/${encodeURIComponent(m.id)}/details`, { cache: "no-store" });
       const dData = await readJsonSafe(dRes);
       if (!dRes.ok || !dData.success) continue;
-      const opt = pickOptionFromDetails(dData);
+      const opt = pickOptionFromDetails(dData, profile);
       if (!opt) continue;
-      const safetyScore = Number((opt.confiance - Math.abs(opt.cote - 1.65) * 11).toFixed(2));
+      const safetyScore = Number((opt.confiance - Math.abs(opt.cote - cfg.anchor) * cfg.slope).toFixed(2));
       candidates.push({
         matchId: m.id,
         teamHome: m.teamHome,
@@ -117,6 +181,7 @@ async function generateCouponFallback(size, league) {
 
   return {
     success: true,
+    riskProfile: profile,
     coupon: picks,
     summary: { totalSelections: picks.length, combinedOdd, averageConfidence },
     warning:
@@ -181,6 +246,7 @@ function renderCoupon(data) {
       <span>Selections: ${data.summary?.totalSelections ?? 0}</span>
       <span>Cote combinee: ${formatOdd(data.summary?.combinedOdd)}</span>
       <span>Confiance moyenne: ${data.summary?.averageConfidence ?? 0}%</span>
+      <span>Profil: ${data.riskProfile || "balanced"}</span>
     </div>
     <ol>${items}</ol>
     <p class="warning">${data.warning || ""}</p>
@@ -189,6 +255,11 @@ function renderCoupon(data) {
   if (validationPanel) {
     validationPanel.innerHTML = "<p>Ticket genere. Clique sur <strong>Valider Ticket Pro</strong>.</p>";
   }
+  addHistoryEntry({
+    type: "coupon",
+    at: new Date().toISOString(),
+    note: `${data.summary?.totalSelections ?? 0} selections | cote ${formatOdd(data.summary?.combinedOdd)} | profil ${data.riskProfile || "balanced"}`,
+  });
 }
 
 function renderValidation(report) {
@@ -230,6 +301,11 @@ function renderValidation(report) {
     </div>
     <ul class="validation-list">${rows || "<li>Aucune ligne de ticket</li>"}</ul>
   `;
+  addHistoryEntry({
+    type: "validation",
+    at: new Date().toISOString(),
+    note: `${statusLabel} | total ${report.summary?.total ?? 0} | a corriger ${report.summary?.toFix ?? 0}`,
+  });
 }
 
 async function generateCoupon() {
@@ -241,13 +317,17 @@ async function generateCoupon() {
 
   try {
     const league = leagueSelect.value || "all";
+    const risk = document.getElementById("riskSelect")?.value || "balanced";
     let data;
     try {
-      const res = await fetch(`/api/coupon?size=${size}&league=${encodeURIComponent(league)}`, { cache: "no-store" });
+      const res = await fetch(
+        `/api/coupon?size=${size}&league=${encodeURIComponent(league)}&risk=${encodeURIComponent(risk)}`,
+        { cache: "no-store" }
+      );
       data = await readJsonSafe(res);
       if (!res.ok || !data.success) throw new Error(data.error || data.message || "Erreur /api/coupon");
     } catch (primaryErr) {
-      data = await generateCouponFallback(size, league);
+      data = await generateCouponFallback(size, league, risk);
       if (!data?.success) throw primaryErr;
     }
     renderCoupon(data);
@@ -400,3 +480,4 @@ if (validateBtn) {
 }
 
 loadLeagues();
+renderHistory();

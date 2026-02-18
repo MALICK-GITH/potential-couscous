@@ -11,6 +11,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/chat-widget.css" />
   </head>
   <body>
     <div class="bg-grid" aria-hidden="true"></div>
@@ -33,6 +34,11 @@
 
     <main>
       <section class="stats" id="stats"></section>
+      <section class="match-modes" id="matchModes">
+        <button class="match-mode active" type="button" data-mode="upcoming">A venir</button>
+        <button class="match-mode" type="button" data-mode="live">En cours</button>
+        <button class="match-mode" type="button" data-mode="finished">Termines</button>
+      </section>
       <section class="matches" id="matches"></section>
       <p class="empty hidden" id="emptyState">
         Aucun match FIFA penalty detecte pour le moment.
@@ -44,5 +50,6 @@
     </footer>
 
     <script src="/app.js" defer></script>
+    <script src="/chat-widget.js" defer></script>
   </body>
   </html>
