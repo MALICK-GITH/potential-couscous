@@ -44,13 +44,27 @@
             <option value="aggressive">Agressif</option>
           </select>
         </label>
+        <label>
+          <span>Mise simulee</span>
+          <input id="stakeInput" type="number" min="100" step="100" value="1000" />
+        </label>
+        <label>
+          <span>Seuil drift (%)</span>
+          <input id="driftInput" type="number" min="2" max="25" step="1" value="6" />
+        </label>
         <div class="actions">
           <button id="generateBtn" type="button">Generer Coupon</button>
+          <button id="generateMultiBtn" type="button">3 Strategies</button>
           <button id="validateBtn" type="button">Valider Ticket Pro</button>
           <button id="sendTelegramBtn" type="button" disabled>Envoyer Telegram</button>
+          <button id="downloadPdfBtn" type="button" disabled>PDF Coupon</button>
         </div>
       </section>
 
+      <section class="panel" id="multiResult">
+        <h3>Coupon Multi-Strategie</h3>
+        <p>Genere Safe / Equilibre / Agressif en un clic.</p>
+      </section>
       <section class="panel" id="result">
         <p>En attente de generation.</p>
       </section>
@@ -68,6 +82,7 @@
       <button id="generateBtnSticky" type="button">Generer</button>
       <button id="validateBtnSticky" type="button">Valider</button>
       <button id="sendTelegramBtnSticky" type="button" disabled>Telegram</button>
+      <button id="downloadPdfBtnSticky" type="button" disabled>PDF</button>
     </nav>
     <script src="/coupon.js" defer></script>
     <script src="/chat-widget.js" defer></script>

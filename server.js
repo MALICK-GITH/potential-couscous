@@ -175,6 +175,80 @@ function buildTelegramCouponText(payload = {}) {
   return lines.join("\n").slice(0, 3900);
 }
 
+function pdfEscape(text = "") {
+  return String(text)
+    .replace(/\\/g, "\\\\")
+    .replace(/\(/g, "\\(")
+    .replace(/\)/g, "\\)");
+}
+
+function buildSimplePdf(lines = []) {
+  const safeLines = Array.isArray(lines) ? lines : [];
+  const lineHeight = 16;
+  const left = 48;
+  const top = 800;
+  const contentLines = ["BT", "/F1 11 Tf"];
+  let y = top;
+  for (const raw of safeLines.slice(0, 180)) {
+    const line = pdfEscape(raw);
+    contentLines.push(`${left} ${y} Td (${line}) Tj`);
+    contentLines.push(`${-left} 0 Td`);
+    y -= lineHeight;
+    if (y < 60) break;
+  }
+  contentLines.push("ET");
+  const streamContent = contentLines.join("\n");
+
+  const objects = [];
+  objects.push("1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj");
+  objects.push("2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj");
+  objects.push("3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >> endobj");
+  objects.push("4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj");
+  objects.push(`5 0 obj << /Length ${Buffer.byteLength(streamContent, "utf8")} >> stream\n${streamContent}\nendstream endobj`);
+
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+  for (const obj of objects) {
+    offsets.push(Buffer.byteLength(pdf, "utf8"));
+    pdf += `${obj}\n`;
+  }
+  const xrefOffset = Buffer.byteLength(pdf, "utf8");
+  pdf += `xref\n0 ${objects.length + 1}\n`;
+  pdf += "0000000000 65535 f \n";
+  for (let i = 1; i <= objects.length; i += 1) {
+    const off = String(offsets[i]).padStart(10, "0");
+    pdf += `${off} 00000 n \n`;
+  }
+  pdf += `trailer << /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+  return Buffer.from(pdf, "utf8");
+}
+
+function buildCouponPdfLines(payload = {}) {
+  const coupon = Array.isArray(payload.coupon) ? payload.coupon : [];
+  const summary = payload.summary || {};
+  const riskProfile = String(payload.riskProfile || "balanced");
+  const generatedAt = new Date().toLocaleString("fr-FR");
+  const lines = [
+    "FC 25 VIRTUAL PREDICTIONS - COUPON PDF",
+    "Signe: SOLITAIRE HACK",
+    `Date: ${generatedAt}`,
+    `Profil: ${riskProfile}`,
+    `Selections: ${Number(summary.totalSelections) || coupon.length}`,
+    `Cote combinee: ${formatOddForTelegram(summary.combinedOdd)}`,
+    `Confiance moyenne: ${Number(summary.averageConfidence) || 0}%`,
+    "",
+  ];
+  coupon.forEach((pick, i) => {
+    lines.push(`${i + 1}. ${pick.teamHome || "Equipe 1"} vs ${pick.teamAway || "Equipe 2"}`);
+    lines.push(`   Ligue: ${pick.league || "Non specifiee"}`);
+    lines.push(`   Pari: ${pick.pari || "-"}`);
+    lines.push(`   Cote: ${formatOddForTelegram(pick.cote)} | Confiance: ${Number(pick.confiance) || 0}%`);
+    lines.push("");
+  });
+  lines.push("Aucune combinaison n'est garantie gagnante.");
+  return lines;
+}
+
 app.get("/api/team-badge", (req, res) => {
   const name = String(req.query.name || "Equipe").trim();
   const initials = initialsFromName(name).slice(0, 2);
@@ -318,6 +392,32 @@ app.post("/api/coupon/validate", async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Impossible de valider le ticket coupon.",
+      error: error.message,
+    });
+  }
+});
+
+app.post("/api/coupon/pdf", (req, res) => {
+  try {
+    const coupon = Array.isArray(req.body?.coupon) ? req.body.coupon : [];
+    if (!coupon.length) {
+      return res.status(400).json({
+        success: false,
+        message: "Coupon vide. Impossible de generer le PDF.",
+      });
+    }
+
+    const pdfLines = buildCouponPdfLines(req.body || {});
+    const pdfBuffer = buildSimplePdf(pdfLines);
+    const filename = `coupon-fc25-${Date.now()}.pdf`;
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader("Content-Length", String(pdfBuffer.length));
+    return res.send(pdfBuffer);
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Impossible de generer le PDF coupon.",
       error: error.message,
     });
   }

@@ -44,8 +44,9 @@ function updateRefreshBadge() {
 
 function setMatchTelegramButtonEnabled(enabled) {
   const btn = document.getElementById("sendMatchTelegramBtn");
-  if (!btn) return;
-  btn.disabled = !enabled;
+  const pdfBtn = document.getElementById("downloadMatchPdfBtn");
+  if (btn) btn.disabled = !enabled;
+  if (pdfBtn) pdfBtn.disabled = !enabled;
 }
 
 function startAutoRefresh() {
@@ -273,6 +274,44 @@ async function sendCurrentMatchToTelegram() {
       btn.textContent = "Envoyer Telegram";
       setMatchTelegramButtonEnabled(Boolean(lastDetailsData));
     }
+  }
+}
+
+async function downloadCurrentMatchPdf() {
+  if (!lastDetailsData) return;
+  const selection = pickSingleSelectionFromDetails(lastDetailsData);
+  if (!selection) {
+    document.getElementById("sub").textContent = "Selection PDF impossible pour ce match.";
+    return;
+  }
+
+  try {
+    const payload = {
+      coupon: [selection],
+      summary: couponSummary([selection]),
+      riskProfile: "single-match",
+    };
+    const res = await fetch("/api/coupon/pdf", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(text || `HTTP ${res.status}`);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `match-ticket-${selection.matchId}-${Date.now()}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    document.getElementById("sub").textContent = "PDF match telecharge.";
+  } catch (error) {
+    document.getElementById("sub").textContent = `Erreur PDF: ${error.message}`;
   }
 }
 
@@ -555,6 +594,8 @@ function init() {
   setMatchTelegramButtonEnabled(false);
   const sendBtn = document.getElementById("sendMatchTelegramBtn");
   if (sendBtn) sendBtn.addEventListener("click", sendCurrentMatchToTelegram);
+  const pdfBtn = document.getElementById("downloadMatchPdfBtn");
+  if (pdfBtn) pdfBtn.addEventListener("click", downloadCurrentMatchPdf);
   loadData("manual");
   startAutoRefresh();
 }

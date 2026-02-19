@@ -3,8 +3,10 @@ function formatOdd(value) {
 }
 
 let lastCouponData = null;
+let lastCouponBackups = new Map();
 const COUPON_HISTORY_KEY = "fc25_coupon_history_v1";
-const TICKET_SHIELD_DRIFT = 6;
+const DEFAULT_TICKET_SHIELD_DRIFT = 6;
+const MULTI_PROFILES = ["safe", "balanced", "aggressive"];
 
 function toNumber(v, fallback = 0) {
   const n = Number(v);
@@ -16,6 +18,13 @@ function normalizeText(v) {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "");
+}
+
+function getDriftThreshold() {
+  const input = document.getElementById("driftInput");
+  const n = Number(input?.value);
+  if (!Number.isFinite(n)) return DEFAULT_TICKET_SHIELD_DRIFT;
+  return Math.max(2, Math.min(25, n));
 }
 
 function isStrictUpcomingMatch(match, nowSec) {
@@ -56,6 +65,72 @@ function riskConfig(profile = "balanced") {
   if (key === "safe") return { minOdd: 1.2, maxOdd: 1.7, minConfidence: 62, slope: 8, anchor: 1.45 };
   if (key === "aggressive") return { minOdd: 1.55, maxOdd: 3.2, minConfidence: 45, slope: 6, anchor: 2.2 };
   return { minOdd: 1.3, maxOdd: 2.25, minConfidence: 50, slope: 11, anchor: 1.7 };
+}
+
+function formatMinutes(mins) {
+  const m = Math.max(0, Math.floor(Number(mins) || 0));
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60);
+  const r = m % 60;
+  return `${h}h ${r}m`;
+}
+
+function computeCouponInsights(coupon = [], riskProfile = "balanced") {
+  if (!Array.isArray(coupon) || !coupon.length) {
+    return {
+      qualityScore: 0,
+      correlationRisk: 100,
+      minStartMinutes: null,
+      confidenceAvg: 0,
+      leagueDiversity: 0,
+    };
+  }
+
+  const nowSec = Math.floor(Date.now() / 1000);
+  const confidenceAvg = coupon.reduce((acc, x) => acc + toNumber(x.confiance, 0), 0) / coupon.length;
+  const leagues = new Set(coupon.map((x) => String(x.league || "").trim()).filter(Boolean));
+  const leagueDiversity = (leagues.size / coupon.length) * 100;
+
+  const sameLeaguePairs = [];
+  for (let i = 0; i < coupon.length; i += 1) {
+    for (let j = i + 1; j < coupon.length; j += 1) {
+      if (String(coupon[i].league || "") === String(coupon[j].league || "")) sameLeaguePairs.push(1);
+    }
+  }
+  const pairCount = (coupon.length * (coupon.length - 1)) / 2 || 1;
+  const correlationRisk = Math.round((sameLeaguePairs.length / pairCount) * 100);
+
+  const starts = coupon
+    .map((x) => toNumber(x.startTimeUnix, 0))
+    .filter((x) => x > nowSec)
+    .map((x) => Math.floor((x - nowSec) / 60));
+  const minStartMinutes = starts.length ? Math.min(...starts) : null;
+  const timingScore = minStartMinutes == null ? 30 : Math.max(0, Math.min(100, minStartMinutes * 2));
+
+  const profileBoost = riskProfile === "safe" ? 8 : riskProfile === "aggressive" ? -4 : 0;
+  const rawQuality =
+    confidenceAvg * 0.48 + leagueDiversity * 0.22 + timingScore * 0.2 + (100 - correlationRisk) * 0.15 + profileBoost;
+  const qualityScore = Math.max(5, Math.min(99, Math.round(rawQuality)));
+
+  return {
+    qualityScore,
+    correlationRisk,
+    minStartMinutes,
+    confidenceAvg: Number(confidenceAvg.toFixed(1)),
+    leagueDiversity: Number(leagueDiversity.toFixed(1)),
+  };
+}
+
+function getStakeValue() {
+  const stake = Number(document.getElementById("stakeInput")?.value);
+  return Number.isFinite(stake) && stake > 0 ? stake : 0;
+}
+
+function payoutFromStake(stake, odd) {
+  const o = Number(odd);
+  if (!(stake > 0 && Number.isFinite(o) && o > 1)) return { payout: 0, net: 0 };
+  const payout = Number((stake * o).toFixed(2));
+  return { payout, net: Number((payout - stake).toFixed(2)) };
 }
 
 function pickOptionFromDetails(details, profile = "balanced") {
@@ -165,6 +240,7 @@ async function generateCouponFallback(size, league, profile = "balanced") {
         teamHome: m.teamHome,
         teamAway: m.teamAway,
         league: m.league,
+        startTimeUnix: m.startTimeUnix,
         pari: opt.pari,
         cote: Number(opt.cote),
         confiance: Number(opt.confiance.toFixed(1)),
@@ -198,9 +274,13 @@ function setResultHtml(html) {
 function updateSendButtonState() {
   const btn = document.getElementById("sendTelegramBtn");
   const stickyBtn = document.getElementById("sendTelegramBtnSticky");
+  const pdfBtn = document.getElementById("downloadPdfBtn");
+  const pdfStickyBtn = document.getElementById("downloadPdfBtnSticky");
   const enabled = Boolean(lastCouponData && Array.isArray(lastCouponData.coupon) && lastCouponData.coupon.length > 0);
   if (btn) btn.disabled = !enabled;
   if (stickyBtn) stickyBtn.disabled = !enabled;
+  if (pdfBtn) pdfBtn.disabled = !enabled;
+  if (pdfStickyBtn) pdfStickyBtn.disabled = !enabled;
 }
 
 async function loadLeagues() {
@@ -225,6 +305,7 @@ async function loadLeagues() {
 
 function renderCoupon(data) {
   lastCouponData = data;
+  lastCouponBackups = new Map();
   const picks = Array.isArray(data?.coupon) ? data.coupon : [];
   updateSendButtonState();
   if (!picks.length) {
@@ -250,6 +331,10 @@ function renderCoupon(data) {
     )
     .join("");
 
+  const insights = computeCouponInsights(picks, data.riskProfile || "balanced");
+  const stake = getStakeValue();
+  const pay = payoutFromStake(stake, data.summary?.combinedOdd);
+
   setResultHtml(`
     <h3>Coupon Optimise</h3>
     <div class="meta">
@@ -258,6 +343,10 @@ function renderCoupon(data) {
       <span>Confiance moyenne: ${data.summary?.averageConfidence ?? 0}%</span>
       <span>Profil: ${data.riskProfile || "balanced"}</span>
       <span>Ticket Shield: ACTIF</span>
+      <span>Qualite: ${insights.qualityScore}/100</span>
+      <span>Risque correlation: ${insights.correlationRisk}%</span>
+      <span>Deadline: ${insights.minStartMinutes == null ? "-" : formatMinutes(insights.minStartMinutes)}</span>
+      <span>Mise ${stake.toFixed(0)} => Retour ${pay.payout.toFixed(2)} | Net ${pay.net.toFixed(2)}</span>
     </div>
     <ol>${items}</ol>
     <p class="warning">${data.warning || ""}</p>
@@ -271,6 +360,72 @@ function renderCoupon(data) {
     at: new Date().toISOString(),
     note: `${data.summary?.totalSelections ?? 0} selections | cote ${formatOdd(data.summary?.combinedOdd)} | profil ${data.riskProfile || "balanced"}`,
   });
+}
+
+async function buildBackupPlan(coupon = [], profile = "balanced") {
+  const backups = new Map();
+  for (const pick of coupon) {
+    try {
+      const res = await fetch(`/api/matches/${encodeURIComponent(pick.matchId)}/details`, { cache: "no-store" });
+      const data = await readJsonSafe(res);
+      if (!res.ok || !data.success) continue;
+      const markets = Array.isArray(data.bettingMarkets) ? data.bettingMarkets : [];
+      const alternatives = markets
+        .filter((m) => String(m.nom) !== String(pick.pari))
+        .sort((a, b) => Math.abs(Number(a.cote || 0) - Number(pick.cote || 0)) - Math.abs(Number(b.cote || 0) - Number(pick.cote || 0)));
+      const candidate = alternatives.find((m) => Number(m.cote) > 1.2) || null;
+      if (!candidate) continue;
+      backups.set(String(pick.matchId), {
+        pari: candidate.nom,
+        odd: Number(candidate.cote),
+        confidence: Math.max(48, Number(pick.confiance || 55) - 3),
+        source: `PLAN_B_${profile.toUpperCase()}`,
+      });
+    } catch {}
+  }
+  return backups;
+}
+
+async function renderMultiStrategy() {
+  const panel = document.getElementById("multiResult");
+  const league = document.getElementById("leagueSelect")?.value || "all";
+  const size = Math.max(1, Math.min(Number(document.getElementById("sizeInput")?.value) || 3, 12));
+  panel.innerHTML = "<h3>Coupon Multi-Strategie</h3><p>Generation en cours...</p>";
+
+  const cards = [];
+  for (const profile of MULTI_PROFILES) {
+    try {
+      let data;
+      try {
+        const res = await fetch(`/api/coupon?size=${size}&league=${encodeURIComponent(league)}&risk=${profile}`, {
+          cache: "no-store",
+        });
+        data = await readJsonSafe(res);
+        if (!res.ok || !data.success) throw new Error();
+      } catch {
+        data = await generateCouponFallback(size, league, profile);
+      }
+      const picks = Array.isArray(data.coupon) ? data.coupon : [];
+      const insights = computeCouponInsights(picks, profile);
+      cards.push(`
+        <article class="risk-card">
+          <h4>${profile.toUpperCase()}</h4>
+          <div>Selections: ${data.summary?.totalSelections ?? picks.length}</div>
+          <div>Cote: ${formatOdd(data.summary?.combinedOdd)}</div>
+          <div>Confiance: ${data.summary?.averageConfidence ?? 0}%</div>
+          <div>Qualite: ${insights.qualityScore}/100</div>
+          <div>Deadline: ${insights.minStartMinutes == null ? "-" : formatMinutes(insights.minStartMinutes)}</div>
+        </article>
+      `);
+    } catch {
+      cards.push(`<article class="risk-card"><h4>${profile.toUpperCase()}</h4><div>Indisponible</div></article>`);
+    }
+  }
+
+  panel.innerHTML = `
+    <h3>Coupon Multi-Strategie</h3>
+    <div class="risk-grid">${cards.join("")}</div>
+  `;
 }
 
 async function fetchValidationReport(payload) {
@@ -395,8 +550,14 @@ async function sendCouponToTelegram() {
   if (panel) panel.innerHTML = "<p>Envoi Telegram en cours...</p>";
 
   try {
+    const deadline = computeCouponInsights(lastCouponData.coupon, lastCouponData.riskProfile).minStartMinutes;
+    if (deadline != null && deadline <= 1) {
+      panel.innerHTML = "<p>Envoi bloque: deadline trop proche (moins de 1 minute).</p>";
+      return;
+    }
+
     const shieldPayload = {
-      driftThresholdPercent: TICKET_SHIELD_DRIFT,
+      driftThresholdPercent: getDriftThreshold(),
       selections: lastCouponData.coupon.map((x) => ({
         matchId: x.matchId,
         pari: x.pari,
@@ -404,6 +565,9 @@ async function sendCouponToTelegram() {
       })),
     };
     const shieldReport = await fetchValidationReport(shieldPayload);
+    if (!lastCouponBackups.size) {
+      lastCouponBackups = await buildBackupPlan(lastCouponData.coupon, lastCouponData.riskProfile || "balanced");
+    }
     const adapted = applyAdaptiveParlay(shieldReport);
     if (adapted.blocked.length > 0) {
       const blockList = adapted.blocked.map((x) => `<li>${x}</li>`).join("");
@@ -417,6 +581,12 @@ async function sendCouponToTelegram() {
     }
 
     if (adapted.replaced > 0) {
+      adapted.coupon = adapted.coupon.map((x) => {
+        const b = lastCouponBackups.get(String(x.matchId));
+        return b && String(x.pari) === String(lastCouponData?.coupon?.find((c) => String(c.matchId) === String(x.matchId))?.pari)
+          ? { ...x, pari: b.pari, cote: b.odd, confiance: b.confidence, source: b.source }
+          : x;
+      });
       lastCouponData = {
         ...lastCouponData,
         coupon: adapted.coupon,
@@ -431,7 +601,7 @@ async function sendCouponToTelegram() {
       summary: lastCouponData.summary || {},
       riskProfile: lastCouponData.riskProfile || "balanced",
       ticketShield: {
-        driftThresholdPercent: TICKET_SHIELD_DRIFT,
+        driftThresholdPercent: getDriftThreshold(),
         replacedSelections: adapted.replaced,
       },
     };
@@ -454,7 +624,7 @@ async function sendCouponToTelegram() {
         <h3>Envoi Telegram</h3>
         <p class="ticket-status ticket-ok">ENVOI REUSSI</p>
         <p>${data.message || "Coupon envoye sur Telegram."}</p>
-        <p>Ticket Shield IA: drift ${TICKET_SHIELD_DRIFT}% | Remplacements: ${adapted.replaced}</p>
+        <p>Ticket Shield IA: drift ${getDriftThreshold()}% | Remplacements: ${adapted.replaced}</p>
       `;
     }
     addHistoryEntry({
@@ -464,6 +634,41 @@ async function sendCouponToTelegram() {
     });
   } catch (error) {
     if (panel) panel.innerHTML = `<p>Erreur Telegram: ${error.message}</p>`;
+  }
+}
+
+async function downloadCouponPdf() {
+  const panel = document.getElementById("validation");
+  if (!lastCouponData || !Array.isArray(lastCouponData.coupon) || lastCouponData.coupon.length === 0) {
+    if (panel) panel.innerHTML = "<p>Genere d'abord un coupon avant PDF.</p>";
+    return;
+  }
+  try {
+    const res = await fetch("/api/coupon/pdf", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        coupon: lastCouponData.coupon,
+        summary: lastCouponData.summary || {},
+        riskProfile: lastCouponData.riskProfile || "balanced",
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(text || `HTTP ${res.status}`);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `coupon-fc25-${Date.now()}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    if (panel) panel.innerHTML = "<p>PDF coupon telecharge avec succes.</p>";
+  } catch (error) {
+    if (panel) panel.innerHTML = `<p>Erreur PDF: ${error.message}</p>`;
   }
 }
 
@@ -490,6 +695,7 @@ async function generateCoupon() {
       if (!data?.success) throw primaryErr;
     }
     renderCoupon(data);
+    lastCouponBackups = await buildBackupPlan(Array.isArray(data?.coupon) ? data.coupon : [], risk);
   } catch (error) {
     setResultHtml(`<p>Erreur: ${error.message}</p>`);
   }
@@ -598,7 +804,7 @@ async function validateTicket() {
 
   try {
     const payload = {
-      driftThresholdPercent: TICKET_SHIELD_DRIFT,
+      driftThresholdPercent: getDriftThreshold(),
       selections: lastCouponData.coupon.map((x) => ({
         matchId: x.matchId,
         pari: x.pari,
@@ -614,13 +820,17 @@ async function validateTicket() {
 }
 
 const generateBtn = document.getElementById("generateBtn");
+const generateMultiBtn = document.getElementById("generateMultiBtn");
 const validateBtn = document.getElementById("validateBtn");
 const sendTelegramBtn = document.getElementById("sendTelegramBtn");
+const downloadPdfBtn = document.getElementById("downloadPdfBtn");
 const generateBtnSticky = document.getElementById("generateBtnSticky");
 const validateBtnSticky = document.getElementById("validateBtnSticky");
 const sendTelegramBtnSticky = document.getElementById("sendTelegramBtnSticky");
+const downloadPdfBtnSticky = document.getElementById("downloadPdfBtnSticky");
 
 if (generateBtn) generateBtn.addEventListener("click", generateCoupon);
+if (generateMultiBtn) generateMultiBtn.addEventListener("click", renderMultiStrategy);
 if (validateBtn) {
   validateBtn.addEventListener("click", validateTicket);
   validateBtn.addEventListener("touchend", (e) => {
@@ -644,7 +854,19 @@ if (validateBtnSticky) {
 if (sendTelegramBtnSticky) {
   sendTelegramBtnSticky.addEventListener("click", sendCouponToTelegram);
 }
+if (downloadPdfBtn) {
+  downloadPdfBtn.addEventListener("click", downloadCouponPdf);
+}
+if (downloadPdfBtnSticky) {
+  downloadPdfBtnSticky.addEventListener("click", downloadCouponPdf);
+}
 
 loadLeagues();
 renderHistory();
 updateSendButtonState();
+const stakeInput = document.getElementById("stakeInput");
+if (stakeInput) {
+  stakeInput.addEventListener("input", () => {
+    if (lastCouponData) renderCoupon(lastCouponData);
+  });
+}

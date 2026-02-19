@@ -108,8 +108,10 @@ h1 {
 }
 
 #generateBtn,
+#generateMultiBtn,
 #validateBtn,
-#sendTelegramBtn {
+#sendTelegramBtn,
+#downloadPdfBtn {
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 10px;
   padding: 0.56rem 0.82rem;
@@ -130,18 +132,32 @@ h1 {
   background: linear-gradient(90deg, #7dffad, #c5ffd8);
 }
 
+#generateMultiBtn {
+  color: #051120;
+  background: linear-gradient(90deg, #bca8ff, #e5d9ff);
+}
+
 #sendTelegramBtn {
   color: #051120;
   background: linear-gradient(90deg, #ffd27a, #ffe8b2);
 }
 
+#downloadPdfBtn {
+  color: #051120;
+  background: linear-gradient(90deg, #9be8ff, #d7f6ff);
+}
+
 #generateBtn:active,
+#generateMultiBtn:active,
 #validateBtn:active,
-#sendTelegramBtn:active { transform: translateY(1px); }
+#sendTelegramBtn:active,
+#downloadPdfBtn:active { transform: translateY(1px); }
 
 #generateBtn::after,
+#generateMultiBtn::after,
 #validateBtn::after,
-#sendTelegramBtn::after {
+#sendTelegramBtn::after,
+#downloadPdfBtn::after {
   content: "";
   position: absolute;
   top: -120%;
@@ -158,6 +174,11 @@ h1 {
   opacity: 0.55;
 }
 
+#downloadPdfBtn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .panel h3 {
   margin: 0 0 0.52rem;
   font-family: "Chakra Petch", sans-serif;
@@ -170,6 +191,24 @@ h1 {
   gap: 0.7rem;
   color: var(--muted);
   margin-bottom: 0.55rem;
+}
+
+.risk-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.55rem;
+}
+
+.risk-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.62rem;
+  background: rgba(14, 24, 46, 0.75);
+}
+
+.risk-card h4 {
+  margin: 0 0 0.35rem;
+  font-family: "Chakra Petch", sans-serif;
 }
 
 ol,
@@ -256,7 +295,7 @@ li a {
   bottom: 0;
   z-index: 9996;
   display: none;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.45rem;
   padding: 0.52rem;
   border-top: 1px solid var(--line);
@@ -276,8 +315,14 @@ li a {
 #generateBtnSticky { background: linear-gradient(90deg, #3be7ff, #8bf3ff); }
 #validateBtnSticky { background: linear-gradient(90deg, #7dffad, #c5ffd8); }
 #sendTelegramBtnSticky { background: linear-gradient(90deg, #ffd27a, #ffe8b2); }
+#downloadPdfBtnSticky { background: linear-gradient(90deg, #9be8ff, #d7f6ff); }
 
 #sendTelegramBtnSticky:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+#downloadPdfBtnSticky:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
