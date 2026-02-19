@@ -253,6 +253,8 @@ function buildCouponPdfSummaryLines(payload = {}) {
 function buildCouponPdfDetailedLines(payload = {}) {
   const coupon = Array.isArray(payload.coupon) ? payload.coupon : [];
   const summary = payload.summary || {};
+  const insights = payload.insights || {};
+  const backupPlan = Array.isArray(payload.backupPlan) ? payload.backupPlan : [];
   const riskProfile = String(payload.riskProfile || "balanced");
   const generatedAt = new Date().toLocaleString("fr-FR");
   const total = Number(summary.totalSelections) || coupon.length || 0;
@@ -274,6 +276,8 @@ function buildCouponPdfDetailedLines(payload = {}) {
     `Cote combinee: ${formatOddForTelegram(combinedOdd)}`,
     `Confiance moyenne: ${avgConfidence.toFixed(1)}%`,
     `Diversite ligues: ${leagues.size}`,
+    `Qualite ticket: ${Number(insights.qualityScore) || 0}/100`,
+    `Risque correlation: ${Number(insights.correlationRisk) || 0}%`,
     "",
     "DISTRIBUTION RISQUE",
     `Safe (>=75%): ${safeCount}`,
@@ -298,8 +302,27 @@ function buildCouponPdfDetailedLines(payload = {}) {
   });
 
   lines.push("NOTE: Le Value Index est un indicateur interne d'equilibre rendement/fiabilite.");
+  if (backupPlan.length) {
+    lines.push("");
+    lines.push("PLAN B (REMPLACEMENTS PROPOSES)");
+    backupPlan.slice(0, 20).forEach((b, i) => {
+      lines.push(
+        `${i + 1}. Match ${b.matchId || "-"} -> ${b.pari || "-"} | Cote ${formatOddForTelegram(b.cote)} | Conf ${
+          Number(b.confiance) || 0
+        }%`
+      );
+    });
+  }
   lines.push("Aucune combinaison n'est garantie gagnante.");
   return lines;
+}
+
+function getStartedSelections(coupon = []) {
+  const nowSec = Math.floor(Date.now() / 1000);
+  return coupon.filter((pick) => {
+    const start = Number(pick?.startTimeUnix || 0);
+    return Number.isFinite(start) && start > 0 && start <= nowSec;
+  });
 }
 
 app.get("/api/team-badge", (req, res) => {
@@ -459,6 +482,13 @@ function generateCouponPdfHandler(req, res) {
         message: "Coupon vide. Impossible de generer le PDF.",
       });
     }
+    const started = getStartedSelections(coupon);
+    if (started.length) {
+      return res.status(400).json({
+        success: false,
+        message: "PDF bloque: le coupon contient des matchs deja demarres.",
+      });
+    }
 
     const mode = String(req.body?.mode || "summary").toLowerCase();
     const isDetailed = mode === "detailed" || mode === "detail" || mode === "analysis";
@@ -503,6 +533,13 @@ async function sendTelegramCouponHandler(req, res) {
       return res.status(400).json({
         success: false,
         message: "Coupon vide. Genere d'abord un coupon.",
+      });
+    }
+    const started = getStartedSelections(coupon);
+    if (started.length) {
+      return res.status(400).json({
+        success: false,
+        message: "Envoi Telegram bloque: le coupon contient des matchs deja demarres.",
       });
     }
 

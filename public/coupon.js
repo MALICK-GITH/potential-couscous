@@ -190,7 +190,15 @@ function renderHistory() {
     .map(
       (x, i) => `
       <li>
-        <strong>${i + 1}. ${x.type === "validation" ? "Validation" : x.type === "telegram" ? "Telegram" : "Coupon"} - ${new Date(x.at).toLocaleString("fr-FR")}</strong>
+        <strong>${i + 1}. ${
+          x.type === "validation"
+            ? "Validation"
+            : x.type === "telegram"
+            ? "Telegram"
+            : x.type === "pdf"
+            ? "PDF"
+            : "Coupon"
+        } - ${new Date(x.at).toLocaleString("fr-FR")}</strong>
         <span>${x.note}</span>
       </li>
     `
@@ -552,51 +560,7 @@ async function sendCouponToTelegram() {
   if (panel) panel.innerHTML = "<p>Envoi Telegram en cours...</p>";
 
   try {
-    const deadline = computeCouponInsights(lastCouponData.coupon, lastCouponData.riskProfile).minStartMinutes;
-    if (deadline != null && deadline <= 1) {
-      panel.innerHTML = "<p>Envoi bloque: deadline trop proche (moins de 1 minute).</p>";
-      return;
-    }
-
-    const shieldPayload = {
-      driftThresholdPercent: getDriftThreshold(),
-      selections: lastCouponData.coupon.map((x) => ({
-        matchId: x.matchId,
-        pari: x.pari,
-        cote: x.cote,
-      })),
-    };
-    const shieldReport = await fetchValidationReport(shieldPayload);
-    if (!lastCouponBackups.size) {
-      lastCouponBackups = await buildBackupPlan(lastCouponData.coupon, lastCouponData.riskProfile || "balanced");
-    }
-    const adapted = applyAdaptiveParlay(shieldReport);
-    if (adapted.blocked.length > 0) {
-      const blockList = adapted.blocked.map((x) => `<li>${x}</li>`).join("");
-      panel.innerHTML = `
-        <h3>Ticket Shield IA</h3>
-        <p class="ticket-status ticket-fix">ENVOI BLOQUE</p>
-        <p>Ces selections sont invalides pour envoi:</p>
-        <ul class="validation-list">${blockList}</ul>
-      `;
-      return;
-    }
-
-    if (adapted.replaced > 0) {
-      adapted.coupon = adapted.coupon.map((x) => {
-        const b = lastCouponBackups.get(String(x.matchId));
-        return b && String(x.pari) === String(lastCouponData?.coupon?.find((c) => String(c.matchId) === String(x.matchId))?.pari)
-          ? { ...x, pari: b.pari, cote: b.odd, confiance: b.confidence, source: b.source }
-          : x;
-      });
-      lastCouponData = {
-        ...lastCouponData,
-        coupon: adapted.coupon,
-        summary: createCouponSummary(adapted.coupon),
-        warning: `Parlay adaptatif: ${adapted.replaced} selection(s) remplacee(s) par Ticket Shield.`,
-      };
-      renderCoupon(lastCouponData);
-    }
+    const adapted = await enforceTicketShield("envoi Telegram");
 
     const payload = {
       coupon: lastCouponData.coupon,
@@ -640,10 +604,20 @@ async function sendCouponToTelegram() {
 }
 
 async function fetchCouponPdfBlob(mode = "summary") {
+  const insights = computeCouponInsights(lastCouponData?.coupon || [], lastCouponData?.riskProfile || "balanced");
+  const backupPlan = [...(lastCouponBackups || new Map()).entries()].map(([matchId, b]) => ({
+    matchId,
+    pari: b?.pari || "-",
+    cote: Number(b?.odd || 0),
+    confiance: Number(b?.confidence || 0),
+    source: b?.source || "PLAN_B",
+  }));
   const payload = {
     coupon: lastCouponData.coupon,
     summary: lastCouponData.summary || {},
     riskProfile: lastCouponData.riskProfile || "balanced",
+    insights,
+    backupPlan,
     mode,
   };
   const endpoints =
@@ -680,6 +654,7 @@ async function downloadCouponPdf(mode = "summary") {
     return;
   }
   try {
+    await enforceTicketShield("export PDF");
     const blob = await fetchCouponPdfBlob(mode);
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -690,6 +665,11 @@ async function downloadCouponPdf(mode = "summary") {
     a.remove();
     URL.revokeObjectURL(url);
     if (panel) panel.innerHTML = `<p>PDF ${mode === "detailed" ? "detaille" : "resume"} telecharge avec succes.</p>`;
+    addHistoryEntry({
+      type: "pdf",
+      at: new Date().toISOString(),
+      note: `Export PDF ${mode === "detailed" ? "detaille" : "resume"} | ${lastCouponData.summary?.totalSelections ?? 0} selections`,
+    });
   } catch (error) {
     if (panel) panel.innerHTML = `<p>Erreur PDF: ${error.message}</p>`;
   }
@@ -739,6 +719,47 @@ async function generateCoupon() {
   } catch (error) {
     setResultHtml(`<p>Erreur: ${error.message}</p>`);
   }
+}
+
+async function enforceTicketShield(actionLabel = "action") {
+  const deadline = computeCouponInsights(lastCouponData.coupon, lastCouponData.riskProfile).minStartMinutes;
+  if (deadline != null && deadline <= 1) {
+    throw new Error(`${actionLabel} bloque: deadline trop proche (moins de 1 minute).`);
+  }
+
+  const shieldPayload = {
+    driftThresholdPercent: getDriftThreshold(),
+    selections: lastCouponData.coupon.map((x) => ({
+      matchId: x.matchId,
+      pari: x.pari,
+      cote: x.cote,
+    })),
+  };
+  const shieldReport = await fetchValidationReport(shieldPayload);
+  if (!lastCouponBackups.size) {
+    lastCouponBackups = await buildBackupPlan(lastCouponData.coupon, lastCouponData.riskProfile || "balanced");
+  }
+  const adapted = applyAdaptiveParlay(shieldReport);
+  if (adapted.blocked.length > 0) {
+    throw new Error(`Ticket Shield bloque ${actionLabel}: ${adapted.blocked.join(" | ")}`);
+  }
+
+  if (adapted.replaced > 0) {
+    adapted.coupon = adapted.coupon.map((x) => {
+      const b = lastCouponBackups.get(String(x.matchId));
+      return b && String(x.pari) === String(lastCouponData?.coupon?.find((c) => String(c.matchId) === String(x.matchId))?.pari)
+        ? { ...x, pari: b.pari, cote: b.odd, confiance: b.confidence, source: b.source }
+        : x;
+    });
+    lastCouponData = {
+      ...lastCouponData,
+      coupon: adapted.coupon,
+      summary: createCouponSummary(adapted.coupon),
+      warning: `Parlay adaptatif: ${adapted.replaced} selection(s) remplacee(s) par Ticket Shield.`,
+    };
+    renderCoupon(lastCouponData);
+  }
+  return adapted;
 }
 
 async function validateTicketFallback(payload) {
