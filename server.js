@@ -667,6 +667,55 @@ function generateCouponImageHandler(req, res) {
   }
 }
 
+function buildCouponPdfBuffer(payload = {}, mode = "quick") {
+  const m = String(mode || "quick").toLowerCase();
+  const lines =
+    m === "detailed" || m === "detail" || m === "analysis"
+      ? buildCouponPdfDetailedLines(payload)
+      : m === "quick" || m === "short" || m === "ultra"
+      ? buildCouponPdfQuickLines(payload)
+      : buildCouponPdfSummaryLines(payload);
+  return buildSimplePdf(lines);
+}
+
+async function resolveTelegramChatId(botToken) {
+  let chatId = String(process.env.TELEGRAM_CHANNEL_ID || "").trim();
+  if (chatId) return chatId;
+  const updatesRes = await fetch(`https://api.telegram.org/bot${botToken}/getUpdates?limit=30&timeout=1`);
+  const updatesData = await updatesRes.json();
+  if (!updatesRes.ok || !updatesData?.ok) {
+    throw new Error(updatesData?.description || "getUpdates indisponible.");
+  }
+  const updates = Array.isArray(updatesData.result) ? updatesData.result : [];
+  for (let i = updates.length - 1; i >= 0; i -= 1) {
+    const chat = updates[i]?.message?.chat || updates[i]?.channel_post?.chat;
+    if (chat?.id && (chat?.type === "private" || chat?.type === "group" || chat?.type === "supergroup")) {
+      chatId = String(chat.id);
+      break;
+    }
+  }
+  if (!chatId) {
+    throw new Error("Aucun chat detecte. Ecris d'abord un message au bot puis reessaie.");
+  }
+  return chatId;
+}
+
+async function sendTelegramDocument(botToken, chatId, fileBlob, fileName, caption = "") {
+  const form = new FormData();
+  form.append("chat_id", chatId);
+  if (caption) form.append("caption", caption);
+  form.append("document", fileBlob, fileName);
+  const res = await fetch(`https://api.telegram.org/bot${botToken}/sendDocument`, {
+    method: "POST",
+    body: form,
+  });
+  const data = await res.json();
+  if (!res.ok || !data?.ok) {
+    throw new Error(data?.description || "API Telegram indisponible.");
+  }
+  return data?.result?.message_id || null;
+}
+
 app.post("/api/coupon/pdf", generateCouponPdfHandler);
 app.post("/api/pdf/coupon", generateCouponPdfHandler);
 app.post("/api/download/coupon", generateCouponPdfHandler);
@@ -708,34 +757,11 @@ async function sendTelegramCouponHandler(req, res) {
     }
 
     const text = buildTelegramCouponText(req.body || {});
-    let chatId = String(process.env.TELEGRAM_CHANNEL_ID || "").trim();
-
-    if (!chatId) {
-      const updatesRes = await fetch(`https://api.telegram.org/bot${botToken}/getUpdates?limit=30&timeout=1`);
-      const updatesData = await updatesRes.json();
-      if (!updatesRes.ok || !updatesData?.ok) {
-        return res.status(502).json({
-          success: false,
-          message: "Impossible de recuperer le chat Telegram depuis le bot.",
-          error: updatesData?.description || "getUpdates indisponible.",
-        });
-      }
-
-      const updates = Array.isArray(updatesData.result) ? updatesData.result : [];
-      for (let i = updates.length - 1; i >= 0; i -= 1) {
-        const chat = updates[i]?.message?.chat || updates[i]?.channel_post?.chat;
-        if (chat?.id && (chat?.type === "private" || chat?.type === "group" || chat?.type === "supergroup")) {
-          chatId = String(chat.id);
-          break;
-        }
-      }
-
-      if (!chatId) {
-        return res.status(400).json({
-          success: false,
-          message: "Aucun chat detecte. Ecris d'abord un message a ton bot sur Telegram, puis reessaie.",
-        });
-      }
+    let chatId;
+    try {
+      chatId = await resolveTelegramChatId(botToken);
+    } catch (e) {
+      return res.status(400).json({ success: false, message: String(e.message || e) });
     }
 
     const sendImage = Boolean(req.body?.sendImage);
@@ -785,9 +811,97 @@ async function sendTelegramCouponHandler(req, res) {
   }
 }
 
+async function sendTelegramCouponPackHandler(req, res) {
+  try {
+    const botToken = String(process.env.TELEGRAM_BOT_TOKEN || "").trim();
+    if (!botToken) {
+      return res.status(500).json({
+        success: false,
+        message: "Configuration Telegram manquante (TELEGRAM_BOT_TOKEN).",
+      });
+    }
+
+    const coupon = Array.isArray(req.body?.coupon) ? req.body.coupon : [];
+    if (coupon.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Coupon vide. Genere d'abord un coupon.",
+      });
+    }
+    const started = getStartedSelections(coupon);
+    if (started.length) {
+      return res.status(400).json({
+        success: false,
+        message: "Envoi pack bloque: le coupon contient des matchs deja demarres.",
+      });
+    }
+
+    let chatId;
+    try {
+      chatId = await resolveTelegramChatId(botToken);
+    } catch (e) {
+      return res.status(400).json({ success: false, message: String(e.message || e) });
+    }
+
+    const text = buildTelegramCouponText(req.body || {});
+    const textRes = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        disable_web_page_preview: true,
+      }),
+    });
+    const textData = await textRes.json();
+    if (!textRes.ok || !textData?.ok) {
+      return res.status(502).json({
+        success: false,
+        message: "Echec envoi texte Telegram.",
+        error: textData?.description || "API Telegram indisponible.",
+      });
+    }
+
+    const svg = buildCouponImageSvg(req.body || {});
+    const imageMessageId = await sendTelegramDocument(
+      botToken,
+      chatId,
+      new Blob([svg], { type: "image/svg+xml" }),
+      `coupon-fc25-${Date.now()}.svg`,
+      "Coupon image - FC 25 Virtual Predictions | Signe: SOLITAIRE HACK"
+    );
+
+    const pdf = buildCouponPdfBuffer(req.body || {}, "quick");
+    const pdfMessageId = await sendTelegramDocument(
+      botToken,
+      chatId,
+      new Blob([pdf], { type: "application/pdf" }),
+      `coupon-fc25-rapide-${Date.now()}.pdf`,
+      "Coupon PDF rapide - FC 25 Virtual Predictions"
+    );
+
+    return res.json({
+      success: true,
+      message: "Pack Telegram envoye: texte + image + PDF.",
+      telegramMessageIds: {
+        text: textData?.result?.message_id || null,
+        image: imageMessageId,
+        pdf: pdfMessageId,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Impossible d'envoyer le pack Telegram.",
+      error: error.message,
+    });
+  }
+}
+
 app.post("/api/coupon/send-telegram", sendTelegramCouponHandler);
 app.post("/api/telegram/send-coupon", sendTelegramCouponHandler);
 app.post("/api/send-telegram", sendTelegramCouponHandler);
+app.post("/api/coupon/send-telegram-pack", sendTelegramCouponPackHandler);
 
 app.post("/api/chat", async (req, res) => {
   try {

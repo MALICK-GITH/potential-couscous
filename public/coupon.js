@@ -281,6 +281,7 @@ function setResultHtml(html) {
 
 function updateSendButtonState() {
   const btn = document.getElementById("sendTelegramBtn");
+  const packBtn = document.getElementById("sendPackBtn");
   const imageTelegramBtn = document.getElementById("sendTelegramImageBtn");
   const stickyBtn = document.getElementById("sendTelegramBtnSticky");
   const stickyImageBtn = document.getElementById("sendTelegramImageBtnSticky");
@@ -292,6 +293,7 @@ function updateSendButtonState() {
   const pdfStickyBtn = document.getElementById("downloadPdfBtnSticky");
   const enabled = Boolean(lastCouponData && Array.isArray(lastCouponData.coupon) && lastCouponData.coupon.length > 0);
   if (btn) btn.disabled = !enabled;
+  if (packBtn) packBtn.disabled = !enabled;
   if (imageTelegramBtn) imageTelegramBtn.disabled = !enabled;
   if (stickyBtn) stickyBtn.disabled = !enabled;
   if (stickyImageBtn) stickyImageBtn.disabled = !enabled;
@@ -301,6 +303,53 @@ function updateSendButtonState() {
   if (pdfBtn) pdfBtn.disabled = !enabled;
   if (pdfDetailedBtn) pdfDetailedBtn.disabled = !enabled;
   if (pdfStickyBtn) pdfStickyBtn.disabled = !enabled;
+}
+
+async function sendCouponPackToTelegram() {
+  const panel = document.getElementById("validation");
+  if (!lastCouponData || !Array.isArray(lastCouponData.coupon) || lastCouponData.coupon.length === 0) {
+    if (panel) panel.innerHTML = "<p>Genere d'abord un coupon avant envoi groupe.</p>";
+    return;
+  }
+
+  if (panel) panel.innerHTML = "<p>Envoi groupe en cours (texte + image + PDF)...</p>";
+
+  try {
+    const adapted = await enforceTicketShield("envoi groupe Telegram");
+    const payload = {
+      coupon: lastCouponData.coupon,
+      summary: lastCouponData.summary || {},
+      riskProfile: lastCouponData.riskProfile || "balanced",
+      ticketShield: {
+        driftThresholdPercent: getDriftThreshold(),
+        replacedSelections: adapted.replaced,
+      },
+    };
+    const res = await fetch("/api/coupon/send-telegram-pack", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await readJsonSafe(res);
+    if (!res.ok || !data?.success) {
+      throw new Error(data?.error || data?.message || "Erreur envoi groupe Telegram");
+    }
+    if (panel) {
+      panel.innerHTML = `
+        <h3>Envoi Groupe Telegram</h3>
+        <p class="ticket-status ticket-ok">ENVOI REUSSI</p>
+        <p>${data.message || "Pack envoye."}</p>
+        <p>Ticket Shield IA: drift ${getDriftThreshold()}% | Remplacements: ${adapted.replaced}</p>
+      `;
+    }
+    addHistoryEntry({
+      type: "telegram",
+      at: new Date().toISOString(),
+      note: `Pack Telegram envoye (texte+image+PDF) | ${lastCouponData.summary?.totalSelections ?? 0} selections`,
+    });
+  } catch (error) {
+    if (panel) panel.innerHTML = `<p>Erreur pack Telegram: ${error.message}</p>`;
+  }
 }
 
 async function loadLeagues() {
@@ -1032,6 +1081,7 @@ const generateMultiBtn = document.getElementById("generateMultiBtn");
 const replaceWeakBtn = document.getElementById("replaceWeakBtn");
 const validateBtn = document.getElementById("validateBtn");
 const sendTelegramBtn = document.getElementById("sendTelegramBtn");
+const sendPackBtn = document.getElementById("sendPackBtn");
 const sendTelegramImageBtn = document.getElementById("sendTelegramImageBtn");
 const downloadImageBtn = document.getElementById("downloadImageBtn");
 const downloadPdfQuickBtn = document.getElementById("downloadPdfQuickBtn");
@@ -1059,6 +1109,9 @@ if (sendTelegramBtn) {
     e.preventDefault();
     sendCouponToTelegram(false);
   });
+}
+if (sendPackBtn) {
+  sendPackBtn.addEventListener("click", sendCouponPackToTelegram);
 }
 if (sendTelegramImageBtn) {
   sendTelegramImageBtn.addEventListener("click", () => sendCouponToTelegram(true));

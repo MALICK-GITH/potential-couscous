@@ -118,6 +118,7 @@ h1 {
 #replaceWeakBtn,
 #validateBtn,
 #sendTelegramBtn,
+#sendPackBtn,
 #sendTelegramImageBtn,
 #downloadImageBtn,
 #downloadPdfQuickBtn,
@@ -158,6 +159,11 @@ h1 {
   background: linear-gradient(90deg, #ffd27a, #ffe8b2);
 }
 
+#sendPackBtn {
+  color: #051120;
+  background: linear-gradient(90deg, #7de6ff, #9dffda);
+}
+
 #sendTelegramImageBtn {
   color: #051120;
   background: linear-gradient(90deg, #8ad8ff, #c7edff);
@@ -188,6 +194,7 @@ h1 {
 #replaceWeakBtn:active,
 #validateBtn:active,
 #sendTelegramBtn:active,
+#sendPackBtn:active,
 #sendTelegramImageBtn:active,
 #downloadImageBtn:active,
 #downloadPdfQuickBtn:active,
@@ -199,6 +206,7 @@ h1 {
 #replaceWeakBtn::after,
 #validateBtn::after,
 #sendTelegramBtn::after,
+#sendPackBtn::after,
 #sendTelegramImageBtn::after,
 #downloadImageBtn::after,
 #downloadPdfQuickBtn::after,
@@ -220,6 +228,7 @@ h1 {
   opacity: 0.55;
 }
 
+#sendPackBtn:disabled,
 #sendTelegramImageBtn:disabled,
 #downloadImageBtn:disabled,
 #replaceWeakBtn:disabled,
@@ -389,7 +398,7 @@ li a {
   }
   .hero, .controls, .panel { padding: 0.8rem; border-radius: 12px; }
   .controls, .actions { grid-template-columns: 1fr; }
-  #generateBtn, #generateMultiBtn, #validateBtn, #sendTelegramBtn, #downloadPdfBtn { width: 100%; }
+  #generateBtn, #generateMultiBtn, #validateBtn, #sendTelegramBtn, #sendPackBtn, #downloadPdfBtn { width: 100%; }
 }
 
 @media (max-width: 420px) {
