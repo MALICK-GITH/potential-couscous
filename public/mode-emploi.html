@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mode d'emploi</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sora:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/mode-emploi.css" />
+    <link rel="stylesheet" href="/signature.css" />
+    <link rel="stylesheet" href="/chat-widget.css" />
+  </head>
+  <body>
+    <main class="page">
+      <a class="back" href="/">Retour aux matchs</a>
+      <a class="back" href="/coupon.html">Page Coupon</a>
+      <a class="back" href="/about.html">A propos du createur</a>
+      <a class="back" href="/developpeur.html">Page Developpeur</a>
+
+      <section class="hero">
+        <p class="tag">Guide Officiel</p>
+        <h1>Mode d'emploi complet</h1>
+        <p class="subtitle">
+          Toutes les astuces pour utiliser le site sans erreur: matchs, details, coupon, image, PDF, Telegram et gestion des
+          problemes.
+        </p>
+      </section>
+
+      <section class="panel">
+        <h2>1. Demarrage rapide</h2>
+        <div class="grid">
+          <article class="mini">
+            <h3>Etape A</h3>
+            <p>Ouvre la page d'accueil, choisis une <strong>ligue</strong>, puis un mode: <strong>A venir</strong>, <strong>Turbo Top 10</strong>, <strong>En cours</strong>.</p>
+          </article>
+          <article class="mini">
+            <h3>Etape B</h3>
+            <p>Clique <strong>Detail predictions</strong> pour voir l'analyse complete du match (moteur IA + marches + validation).</p>
+          </article>
+          <article class="mini">
+            <h3>Etape C</h3>
+            <p>Va sur <strong>Page Coupon</strong>, regle le nombre de matchs, la ligue et le profil de risque, puis genere.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>2. Comprendre les modes</h2>
+        <p>
+          <span class="badge">A venir</span>
+          Matchs pre-match, ideal pour coupons propres.
+        </p>
+        <p>
+          <span class="badge">Turbo Top 10</span>
+          Les meilleurs pre-matchs classes par fiabilite.
+        </p>
+        <p>
+          <span class="badge">En cours</span>
+          Matchs deja lances (utiles pour lecture, pas ideal pour coupon propre).
+        </p>
+        <p>
+          <span class="badge">Termines</span>
+          Historique des matchs.
+        </p>
+      </section>
+
+      <section class="panel">
+        <h2>3. Page detail match</h2>
+        <ul>
+          <li><strong>Neural Match Engine:</strong> radar + flux dynamique + KPI.</li>
+          <li><strong>Validation locale:</strong> aide a voir si le pick reste propre.</li>
+          <li><strong>Envoyer Telegram:</strong> envoi rapide d'un ticket 1 match.</li>
+          <li><strong>PDF Match:</strong> export du ticket detail match.</li>
+        </ul>
+      </section>
+
+      <section class="panel">
+        <h2>4. Page coupon (toutes les options)</h2>
+        <div class="grid">
+          <article class="mini">
+            <h3>Generation</h3>
+            <ul>
+              <li><strong>Generer Coupon:</strong> 1 coupon selon ton profil.</li>
+              <li><strong>3 Strategies:</strong> Safe / Equilibre / Agressif.</li>
+              <li><strong>Remplacer Pick Faible:</strong> swap intelligent du pick le moins fort.</li>
+            </ul>
+          </article>
+          <article class="mini">
+            <h3>Controle qualite</h3>
+            <ul>
+              <li><strong>Valider Ticket Pro:</strong> verification drift + marche + statut match.</li>
+              <li><strong>Ticket Shield:</strong> bloque les selections dangereuses.</li>
+              <li><strong>Alerte correlation:</strong> signale si le coupon est trop lie.</li>
+            </ul>
+          </article>
+          <article class="mini">
+            <h3>Exports</h3>
+            <ul>
+              <li><strong>PDF Rapide:</strong> version courte.</li>
+              <li><strong>PDF Resume:</strong> version standard.</li>
+              <li><strong>PDF Detaille:</strong> version analytique + plan B.</li>
+              <li><strong>Image Coupon:</strong> carte visuelle lisible style accueil.</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>5. Telegram (texte, image, pack)</h2>
+        <ul>
+          <li><strong>Envoyer Telegram:</strong> envoi texte.</li>
+          <li><strong>Telegram Image:</strong> envoi image coupon lisible.</li>
+          <li><strong>Envoi Groupe 1-Clic:</strong> envoie texte + image + PDF en une action.</li>
+        </ul>
+        <p>Si aucun chat n'est detecte, ecris d'abord un message au bot Telegram puis reessaie.</p>
+      </section>
+
+      <section class="panel">
+        <h2>6. Parametres recommandes (propre)</h2>
+        <div class="code">Profil: Equilibre
+Nombre de matchs: 2 a 4
+Seuil drift: 5% a 7%
+Mode matchs: A venir ou Turbo Top 10
+Toujours: Valider Ticket Pro avant envoi/export</div>
+      </section>
+
+      <section class="panel">
+        <h2>7. Resolution des erreurs frequentes</h2>
+        <ul>
+          <li><strong>Route API introuvable:</strong> redemarre le serveur puis recharge la page en dur (<code>Ctrl+F5</code>).</li>
+          <li><strong>Erreur JSON/HTML:</strong> ancien frontend cache, fais un hard refresh.</li>
+          <li><strong>Match deja demarre:</strong> retire le pick ou regenere en mode A venir.</li>
+          <li><strong>Telegram echec:</strong> verifie <code>TELEGRAM_BOT_TOKEN</code> et qu'un chat existe avec le bot.</li>
+          <li><strong>Bouton grise:</strong> genere d'abord un coupon non vide.</li>
+        </ul>
+      </section>
+
+      <section class="panel">
+        <h2>8. Bonnes pratiques de discipline</h2>
+        <ul>
+          <li>Ne jamais forcer un coupon si la validation demande correction.</li>
+          <li>Eviter les coupons trop longs; preferer qualite a quantite.</li>
+          <li>Surveiller les drifts forts avant envoi final.</li>
+          <li>Aucune combinaison n'est garantie gagnante.</li>
+        </ul>
+      </section>
+
+      <section class="panel">
+        <h2>9. FAQ rapide</h2>
+        <p><strong>Q:</strong> Pourquoi je ne vois pas certains matchs ?<br /><strong>R:</strong> Filtre ligue/mode actif, ou match pas dans le flux courant.</p>
+        <p><strong>Q:</strong> Pourquoi un pick est remplace ?<br /><strong>R:</strong> Ticket Shield detecte un risque (drift, marche indisponible, faible confiance, match demarre).</p>
+        <p><strong>Q:</strong> Je veux partager vite ?<br /><strong>R:</strong> Utilise <strong>Envoi Groupe 1-Clic</strong>.</p>
+      </section>
+
+      <section class="panel">
+        <h2>10. Captures reelles de l'interface</h2>
+        <p>Ces apercus sont en direct depuis le site, pour voir l'affichage reel sur chaque page.</p>
+        <div class="capture-grid">
+          <article class="capture-card">
+            <header>
+              <strong>Accueil Live</strong>
+              <a class="capture-open" href="/" target="_blank" rel="noopener noreferrer">Ouvrir</a>
+            </header>
+            <iframe class="live-capture" src="/" loading="lazy" title="Capture accueil"></iframe>
+          </article>
+          <article class="capture-card">
+            <header>
+              <strong>Coupon Builder</strong>
+              <a class="capture-open" href="/coupon.html" target="_blank" rel="noopener noreferrer">Ouvrir</a>
+            </header>
+            <iframe class="live-capture" src="/coupon.html" loading="lazy" title="Capture coupon"></iframe>
+          </article>
+          <article class="capture-card">
+            <header>
+              <strong>Page Detail Match</strong>
+              <a class="capture-open" href="/match.html" target="_blank" rel="noopener noreferrer">Ouvrir</a>
+            </header>
+            <iframe class="live-capture" src="/match.html" loading="lazy" title="Capture detail match"></iframe>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>11. Contact Support</h2>
+        <p>Besoin d'aide immediate ? Utilise un des canaux ci-dessous.</p>
+        <div class="grid">
+          <article class="mini">
+            <h3>WhatsApp Support</h3>
+            <p><a class="capture-open" href="https://wa.me/2250576459875" target="_blank" rel="noopener noreferrer">+2250576459875</a></p>
+            <p><a class="capture-open" href="https://wa.me/2250150588136" target="_blank" rel="noopener noreferrer">+2250150588136</a></p>
+          </article>
+          <article class="mini">
+            <h3>Telegram Support</h3>
+            <p><a class="capture-open" href="https://t.me/SOLITAIREHACKGENIUS" target="_blank" rel="noopener noreferrer">Canal officiel</a></p>
+            <p><a class="capture-open" href="https://t.me/Solitaire666" target="_blank" rel="noopener noreferrer">Inbox privee</a></p>
+          </article>
+        </div>
+      </section>
+
+      <footer class="site-signature">Signe par <strong>SOLITAIRE HACK</strong></footer>
+    </main>
+    <script src="/mode-emploi.js" defer></script>
+    <script src="/chat-widget.js" defer></script>
+  </body>
+</html>

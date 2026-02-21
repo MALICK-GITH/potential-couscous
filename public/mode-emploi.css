@@ -1,0 +1,236 @@
+:root {
+  --bg: #071426;
+  --card: #0d1f3c;
+  --line: rgba(142, 178, 224, 0.26);
+  --text: #eaf4ff;
+  --muted: #b4cceb;
+  --accent: #33e4ff;
+  --ok: #7dffcf;
+  --warn: #ffd98a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: radial-gradient(circle at 8% 12%, #153866 0%, var(--bg) 45%, #050d18 100%);
+  color: var(--text);
+  font-family: "Sora", sans-serif;
+}
+
+.page {
+  width: min(1100px, 94vw);
+  margin: 0 auto;
+  padding: 1rem 0 3rem;
+}
+
+.back {
+  display: inline-block;
+  margin: 0.2rem 0.38rem 0.62rem 0;
+  color: #0a172a;
+  background: linear-gradient(90deg, #8de9ff, #c9f2ff);
+  border-radius: 999px;
+  padding: 0.4rem 0.74rem;
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 0.82rem;
+}
+
+.hero {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: linear-gradient(140deg, rgba(14, 36, 66, 0.9), rgba(8, 16, 30, 0.95));
+  padding: 1rem 1.05rem;
+  margin-bottom: 0.9rem;
+}
+
+.tag {
+  margin: 0;
+  color: var(--accent);
+  font-family: "Chakra Petch", sans-serif;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  font-size: 0.76rem;
+  text-transform: uppercase;
+}
+
+h1 {
+  margin: 0.3rem 0 0.28rem;
+  font-family: "Chakra Petch", sans-serif;
+  font-size: clamp(1.6rem, 3.5vw, 2.3rem);
+}
+
+.subtitle {
+  margin: 0;
+  color: var(--muted);
+}
+
+.panel {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: linear-gradient(155deg, rgba(12, 27, 52, 0.9), rgba(8, 15, 29, 0.94));
+  padding: 0.92rem;
+  margin-bottom: 0.72rem;
+}
+
+.panel h2 {
+  margin: 0 0 0.52rem;
+  font-family: "Chakra Petch", sans-serif;
+  color: var(--warn);
+}
+
+.panel-body {
+  display: block;
+}
+
+.panel p,
+.panel li {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.panel strong {
+  color: var(--text);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 0.6rem;
+}
+
+.mini {
+  border: 1px solid rgba(156, 198, 245, 0.2);
+  border-radius: 12px;
+  background: rgba(8, 16, 32, 0.7);
+  padding: 0.62rem;
+}
+
+.mini h3 {
+  margin: 0 0 0.42rem;
+  color: var(--ok);
+  font-size: 0.98rem;
+  font-family: "Chakra Petch", sans-serif;
+}
+
+.badge {
+  display: inline-block;
+  margin-right: 0.42rem;
+  margin-bottom: 0.34rem;
+  border-radius: 999px;
+  border: 1px solid rgba(125, 255, 207, 0.42);
+  color: #d9fff0;
+  background: rgba(13, 69, 59, 0.4);
+  padding: 0.2rem 0.58rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.code {
+  border: 1px solid rgba(141, 189, 240, 0.24);
+  background: rgba(6, 12, 24, 0.85);
+  border-radius: 10px;
+  padding: 0.6rem;
+  font-family: "Chakra Petch", monospace;
+  font-size: 0.85rem;
+  color: #dff0ff;
+  overflow-x: auto;
+  white-space: pre-wrap;
+}
+
+.site-signature {
+  margin-top: 0.36rem;
+  color: #b7d3f4;
+}
+
+.capture-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 0.62rem;
+}
+
+.capture-card {
+  border: 1px solid rgba(139, 186, 239, 0.25);
+  border-radius: 12px;
+  background: rgba(6, 12, 23, 0.75);
+  overflow: hidden;
+}
+
+.capture-card header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0.62rem;
+  border-bottom: 1px solid rgba(139, 186, 239, 0.2);
+}
+
+.capture-card header strong {
+  color: #d8ebff;
+}
+
+.capture-open {
+  text-decoration: none;
+  border-radius: 999px;
+  border: 1px solid rgba(125, 255, 207, 0.42);
+  color: #d9fff0;
+  background: rgba(13, 69, 59, 0.4);
+  padding: 0.14rem 0.52rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.live-capture {
+  width: 100%;
+  border: 0;
+  height: 300px;
+  background: #040a14;
+}
+
+@media (max-width: 700px) {
+  .page {
+    width: min(100%, 96vw);
+  }
+
+  .panel.is-collapsible {
+    padding: 0;
+    overflow: hidden;
+  }
+
+  .panel.is-collapsible h2 {
+    margin: 0;
+    padding: 0.84rem 0.92rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+    border-bottom: 1px solid rgba(142, 178, 224, 0.2);
+  }
+
+  .panel.is-collapsible h2::after {
+    content: "−";
+    color: #d7f5ff;
+    font-size: 1.2rem;
+    line-height: 1;
+  }
+
+  .panel.is-collapsible.collapsed h2::after {
+    content: "+";
+  }
+
+  .panel.is-collapsible .panel-body {
+    padding: 0.8rem 0.92rem 0.92rem;
+  }
+
+  .panel.is-collapsible.collapsed .panel-body {
+    display: none;
+  }
+
+  .live-capture {
+    height: 220px;
+  }
+}
