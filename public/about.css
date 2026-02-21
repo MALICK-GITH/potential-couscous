@@ -11,9 +11,15 @@
 
 * { box-sizing: border-box; }
 
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
+  min-height: 100dvh;
   font-family: "Sora", sans-serif;
   color: var(--text);
   background:
@@ -96,4 +102,20 @@ h2 {
 .item:hover {
   border-color: rgba(66, 245, 108, 0.5);
   box-shadow: 0 0 0 1px rgba(66, 245, 108, 0.22);
+}
+
+@media (max-width: 760px) {
+  .page {
+    padding:
+      calc(0.9rem + env(safe-area-inset-top))
+      0.75rem
+      calc(1rem + env(safe-area-inset-bottom));
+  }
+  .back {
+    margin-bottom: 0.55rem;
+  }
+  .hero,
+  .panel {
+    border-radius: 12px;
+  }
 }

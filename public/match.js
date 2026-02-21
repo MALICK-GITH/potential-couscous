@@ -291,16 +291,27 @@ async function downloadCurrentMatchPdf() {
       summary: couponSummary([selection]),
       riskProfile: "single-match",
     };
-    const res = await fetch("/api/coupon/pdf", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) {
+    const endpoints = ["/api/coupon/pdf", "/api/pdf/coupon", "/api/download/coupon"];
+    let blob = null;
+    let lastErr = "Erreur PDF";
+    for (const endpoint of endpoints) {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        blob = await res.blob();
+        break;
+      }
       const text = await res.text();
-      throw new Error(text || `HTTP ${res.status}`);
+      if (String(text).includes("Route API introuvable")) {
+        lastErr = "Serveur ancien actif. Redemarre npm start puis recharge la page.";
+      } else {
+        lastErr = text || `HTTP ${res.status}`;
+      }
     }
-    const blob = await res.blob();
+    if (!blob) throw new Error(lastErr);
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;

@@ -378,11 +378,28 @@ function renderMatches() {
     selectedLeague === "all"
       ? allMatches
       : allMatches.filter((match) => match.league === selectedLeague);
-  const filtered = byLeague.filter((match) => classifyMatch(match) === currentMatchMode);
+  const filtered =
+    currentMatchMode === "turbo"
+      ? byLeague
+          .filter((match) => classifyMatch(match) === "upcoming")
+          .sort((a, b) => {
+            const ra = Number(a.reliabilityScore || 0);
+            const rb = Number(b.reliabilityScore || 0);
+            if (rb !== ra) return rb - ra;
+            return Number(a.startTimeUnix || 0) - Number(b.startTimeUnix || 0);
+          })
+          .slice(0, 10)
+      : byLeague.filter((match) => classifyMatch(match) === currentMatchMode);
 
   const leagueLabel = selectedLeague === "all" ? "toutes ligues" : `ligue: ${selectedLeague}`;
   const modeLabel =
-    currentMatchMode === "upcoming" ? "A venir" : currentMatchMode === "live" ? "En cours" : "Termines";
+    currentMatchMode === "upcoming"
+      ? "A venir"
+      : currentMatchMode === "turbo"
+      ? "Turbo Top 10"
+      : currentMatchMode === "live"
+      ? "En cours"
+      : "Termines";
   subTitle.textContent = `${filtered.length} match(s) (${leagueLabel}, ${modeLabel}) - ${currentModeLabel}`;
 
   matchesWrap.innerHTML = "";

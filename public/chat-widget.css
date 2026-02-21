@@ -22,7 +22,7 @@
   right: 16px;
   bottom: calc(92px + env(safe-area-inset-bottom));
   width: min(360px, calc(100vw - 22px));
-  height: min(520px, calc(100vh - 130px));
+  height: min(520px, calc(100dvh - 130px));
   border: 1px solid rgba(114, 177, 255, 0.35);
   border-radius: 16px;
   background: linear-gradient(160deg, rgba(10, 19, 39, 0.96), rgba(8, 14, 29, 0.98));
@@ -120,7 +120,7 @@
     right: 6px;
     bottom: calc(84px + env(safe-area-inset-bottom));
     width: calc(100vw - 12px);
-    height: min(70vh, 560px);
+    height: min(70dvh, 560px);
   }
   .chat-fab {
     right: 10px;

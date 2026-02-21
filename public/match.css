@@ -13,11 +13,17 @@
 
 * { box-sizing: border-box; }
 
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 html, body { overflow-x: hidden; }
 
 body {
   margin: 0;
   min-height: 100vh;
+  min-height: 100dvh;
   font-family: "Sora", sans-serif;
   color: var(--text);
   background:
@@ -247,9 +253,11 @@ li { margin: 0.22rem 0; }
 }
 
 @media (max-width: 760px) {
-  body { padding: 0.66rem; }
+  body {
+    padding: calc(0.66rem + env(safe-area-inset-top)) 0.66rem calc(0.9rem + env(safe-area-inset-bottom));
+  }
   .hero, .panel { padding: 0.8rem; border-radius: 12px; }
-  .hero-tools { justify-content: flex-start; }
+  .hero-tools { justify-content: flex-start; flex-wrap: wrap; }
   .grid2, .chart-grid { grid-template-columns: 1fr; }
   .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .chart-card canvas { height: 230px !important; }

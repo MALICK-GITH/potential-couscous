@@ -188,28 +188,63 @@ function buildCouponImageSvg(payload = {}) {
   const coupon = Array.isArray(payload.coupon) ? payload.coupon : [];
   const summary = payload.summary || {};
   const riskProfile = String(payload.riskProfile || "balanced");
-  const count = Math.max(1, Math.min(coupon.length || 1, 12));
-  const rowH = 72;
-  const headH = 150;
-  const footH = 70;
+  const picks = coupon.slice(0, 6);
+  const count = Math.max(1, picks.length || 1);
+  const cardH = 250;
+  const gap = 18;
+  const headH = 138;
+  const footH = 60;
   const width = 1200;
-  const height = headH + footH + count * rowH;
+  const height = headH + footH + count * cardH + (count - 1) * gap;
   const generatedAt = new Date().toLocaleString("fr-FR");
 
-  const rows = coupon.slice(0, 12).map((pick, i) => {
-    const y = headH + i * rowH;
+  const cards = picks.map((pick, i) => {
+    const y = headH + i * (cardH + gap);
+    const league = escapeXml(pick.league || "Ligue virtuelle");
+    const home = escapeXml(pick.teamHome || "Equipe 1");
+    const away = escapeXml(pick.teamAway || "Equipe 2");
+    const pari = escapeXml(pick.pari || "-");
+    const odd = formatOddForTelegram(pick.cote);
+    const conf = Number(pick.confiance) || 0;
+    const status = conf >= 75 ? "SAFE" : conf >= 60 ? "MODERE" : "RISQUE";
     return `
-      <rect x="36" y="${y}" width="${width - 72}" height="56" rx="12" fill="rgba(255,255,255,0.06)" />
-      <text x="52" y="${y + 22}" fill="#f5fbff" font-size="18" font-weight="700">${i + 1}. ${escapeXml(
-      `${pick.teamHome || "Equipe 1"} vs ${pick.teamAway || "Equipe 2"}`
-    )}</text>
-      <text x="52" y="${y + 42}" fill="#a9c6df" font-size="14">Ligue: ${escapeXml(pick.league || "Non specifiee")} | ${
-      escapeXml(pick.pari || "-")
-    }</text>
-      <text x="${width - 280}" y="${y + 22}" fill="#7dffcf" font-size="16" font-weight="700">Cote ${formatOddForTelegram(
-      pick.cote
-    )}</text>
-      <text x="${width - 280}" y="${y + 42}" fill="#ffd98a" font-size="14">Confiance ${Number(pick.confiance) || 0}%</text>
+      <g transform="translate(36, ${y})">
+        <rect x="0" y="0" width="${width - 72}" height="${cardH}" rx="18" fill="rgba(13,22,43,0.92)" stroke="rgba(67,102,153,0.40)"/>
+        <rect x="0" y="0" width="${width - 72}" height="44" rx="18" fill="rgba(36,215,255,0.10)" />
+        <text x="18" y="28" fill="#b9d4ff" font-size="16" font-weight="600">${i + 1}. ${league}</text>
+        <g transform="translate(${width - 340}, 10)">
+          <rect x="0" y="0" width="132" height="24" rx="999" fill="rgba(36,215,255,0.15)" stroke="rgba(36,215,255,0.45)"/>
+          <text x="66" y="17" text-anchor="middle" fill="#b9f4ff" font-size="12" font-weight="700">Confiance ${conf}%</text>
+          <rect x="144" y="0" width="132" height="24" rx="999" fill="rgba(255,95,121,0.16)" stroke="rgba(255,95,121,0.45)"/>
+          <text x="210" y="17" text-anchor="middle" fill="#ffc5cf" font-size="12" font-weight="700">${status}</text>
+        </g>
+
+        <g transform="translate(0, 46)">
+          <circle cx="90" cy="58" r="28" fill="rgba(9,15,28,0.95)" stroke="rgba(255,255,255,0.16)" stroke-width="2"/>
+          <text x="90" y="64" text-anchor="middle" fill="#d7ecff" font-size="14" font-weight="700">1</text>
+          <text x="90" y="100" text-anchor="middle" fill="#e5f0ff" font-size="16" font-weight="600">${home}</text>
+
+          <text x="${(width - 72) / 2}" y="66" text-anchor="middle" fill="#ffffff" font-size="42" font-weight="800">VS</text>
+
+          <circle cx="${width - 162}" cy="58" r="28" fill="rgba(9,15,28,0.95)" stroke="rgba(255,255,255,0.16)" stroke-width="2"/>
+          <text x="${width - 162}" y="64" text-anchor="middle" fill="#d7ecff" font-size="14" font-weight="700">2</text>
+          <text x="${width - 162}" y="100" text-anchor="middle" fill="#e5f0ff" font-size="16" font-weight="600">${away}</text>
+        </g>
+
+        <g transform="translate(18, 168)">
+          <rect x="0" y="0" width="352" height="58" rx="12" fill="rgba(14,25,48,0.95)" stroke="rgba(66,245,108,0.26)"/>
+          <text x="176" y="22" text-anchor="middle" fill="#9db5d6" font-size="14">Pari</text>
+          <text x="176" y="42" text-anchor="middle" fill="#f5fbff" font-size="15" font-weight="700">${pari}</text>
+
+          <rect x="380" y="0" width="352" height="58" rx="12" fill="rgba(14,25,48,0.95)" stroke="rgba(66,245,108,0.26)"/>
+          <text x="556" y="22" text-anchor="middle" fill="#9db5d6" font-size="14">Cote</text>
+          <text x="556" y="42" text-anchor="middle" fill="#42f56c" font-size="18" font-weight="800">${odd}</text>
+
+          <rect x="760" y="0" width="352" height="58" rx="12" fill="rgba(14,25,48,0.95)" stroke="rgba(66,245,108,0.26)"/>
+          <text x="936" y="22" text-anchor="middle" fill="#9db5d6" font-size="14">Lecture IA</text>
+          <text x="936" y="42" text-anchor="middle" fill="#ffd98a" font-size="15" font-weight="700">${conf}% | ${status}</text>
+        </g>
+      </g>
     `;
   });
 
@@ -227,15 +262,15 @@ function buildCouponImageSvg(payload = {}) {
     </linearGradient>
   </defs>
   <rect x="0" y="0" width="${width}" height="${height}" fill="url(#bg)"/>
-  <rect x="28" y="22" width="${width - 56}" height="${headH - 34}" rx="18" fill="rgba(2,10,24,0.55)" stroke="rgba(125,255,207,0.35)" />
+  <rect x="28" y="20" width="${width - 56}" height="${headH - 30}" rx="18" fill="rgba(2,10,24,0.55)" stroke="rgba(125,255,207,0.35)" />
   <text x="48" y="64" fill="url(#head)" font-size="32" font-weight="800" font-family="Arial, Helvetica, sans-serif">FC 25 COUPON IMAGE</text>
   <text x="48" y="92" fill="#d9ecff" font-size="18" font-family="Arial, Helvetica, sans-serif">Profil ${escapeXml(
     riskProfile
   )} | Selections ${Number(summary.totalSelections) || coupon.length} | Cote ${formatOddForTelegram(summary.combinedOdd)}</text>
-  <text x="48" y="118" fill="#b3cee6" font-size="14" font-family="Arial, Helvetica, sans-serif">Genere le ${escapeXml(
+  <text x="48" y="114" fill="#b3cee6" font-size="14" font-family="Arial, Helvetica, sans-serif">Genere le ${escapeXml(
     generatedAt
   )}</text>
-  ${rows.join("\n")}
+  ${cards.join("\n")}
   <text x="48" y="${height - 28}" fill="#cfe6ff" font-size="15" font-family="Arial, Helvetica, sans-serif">Signe: SOLITAIRE HACK | Aucune combinaison n'est garantie gagnante.</text>
 </svg>`;
 }
