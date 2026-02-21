@@ -975,18 +975,6 @@ function trimTrailingSlash(url = "") {
   return String(url || "").replace(/\/+$/, "");
 }
 
-function extractOpenAiText(raw) {
-  const text =
-    Array.isArray(raw?.output)
-      ? raw.output
-          .flatMap((o) => (Array.isArray(o?.content) ? o.content : []))
-          .map((c) => c?.text || "")
-          .join("\n")
-          .trim()
-      : "";
-  return text || "";
-}
-
 function extractAnthropicText(raw) {
   if (!Array.isArray(raw?.content)) return "";
   return raw.content
@@ -1041,33 +1029,6 @@ async function requestAnthropicChat({ baseUrl, apiKey, model, systemPrompt, user
   throw new Error(errors.filter(Boolean).join(" | ") || "Erreur Anthropic");
 }
 
-async function requestOpenAiChat({ apiKey, model, systemPrompt, userPrompt }) {
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model,
-      input: [
-        { role: "system", content: [{ type: "input_text", text: systemPrompt }] },
-        { role: "user", content: [{ type: "input_text", text: userPrompt }] },
-      ],
-      temperature: 0.5,
-      max_output_tokens: 500,
-    }),
-  });
-
-  const raw = await response.json();
-  if (!response.ok) {
-    throw new Error(raw?.error?.message || raw?.message || `HTTP ${response.status}`);
-  }
-  const answer = extractOpenAiText(raw);
-  if (!answer) throw new Error("Reponse OpenAI vide.");
-  return { answer, model };
-}
-
 app.post("/api/chat", async (req, res) => {
   try {
     if (!canUseChat(req)) {
@@ -1110,8 +1071,6 @@ app.post("/api/chat", async (req, res) => {
       trimText(process.env.ANTHROPIC_DEFAULT_OPUS_MODEL || "", 120) ||
       trimText(process.env.ANTHROPIC_DEFAULT_SONNET_MODEL || "", 120) ||
       "claude-opus-4-6";
-    const openAiKey = trimText(process.env.OPENAI_API_KEY || "", 500);
-    const openAiModel = trimText(process.env.OPENAI_MODEL || "", 120) || "gpt-4o-mini";
     const errors = [];
 
     if (anthropicBaseUrl && anthropicKey) {
@@ -1134,27 +1093,6 @@ app.post("/api/chat", async (req, res) => {
       }
     } else {
       errors.push("Anthropic: configuration absente.");
-    }
-
-    if (openAiKey) {
-      try {
-        const result = await requestOpenAiChat({
-          apiKey: openAiKey,
-          model: openAiModel,
-          systemPrompt,
-          userPrompt,
-        });
-        return res.json({
-          success: true,
-          provider: "openai",
-          model: result.model,
-          answer: result.answer,
-        });
-      } catch (error) {
-        errors.push(`OpenAI: ${error.message}`);
-      }
-    } else {
-      errors.push("OpenAI: configuration absente.");
     }
 
     return res.json({
@@ -1182,15 +1120,11 @@ app.get("/api/chat", (_req, res) => {
   res.json({
     success: true,
     message: "Route chat active. Utilise POST /api/chat avec { message, context }.",
-    providerPriority: ["anthropic", "openai", "local-fallback"],
+    providerPriority: ["anthropic", "local-fallback"],
     anthropic: {
       enabled: Boolean(process.env.ANTHROPIC_BASE_URL && process.env.ANTHROPIC_API_KEY),
       model: anthropicModel,
       baseUrl: process.env.ANTHROPIC_BASE_URL || null,
-    },
-    openai: {
-      enabled: Boolean(process.env.OPENAI_API_KEY),
-      model: process.env.OPENAI_MODEL || "gpt-4o-mini",
     },
   });
 });
