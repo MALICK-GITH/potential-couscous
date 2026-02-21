@@ -971,6 +971,103 @@ app.post("/api/telegram/send-coupon", sendTelegramCouponHandler);
 app.post("/api/send-telegram", sendTelegramCouponHandler);
 app.post("/api/coupon/send-telegram-pack", sendTelegramCouponPackHandler);
 
+function trimTrailingSlash(url = "") {
+  return String(url || "").replace(/\/+$/, "");
+}
+
+function extractOpenAiText(raw) {
+  const text =
+    Array.isArray(raw?.output)
+      ? raw.output
+          .flatMap((o) => (Array.isArray(o?.content) ? o.content : []))
+          .map((c) => c?.text || "")
+          .join("\n")
+          .trim()
+      : "";
+  return text || "";
+}
+
+function extractAnthropicText(raw) {
+  if (!Array.isArray(raw?.content)) return "";
+  return raw.content
+    .map((c) => (c?.type === "text" ? c.text || "" : ""))
+    .join("\n")
+    .trim();
+}
+
+async function requestAnthropicChat({ baseUrl, apiKey, model, systemPrompt, userPrompt }) {
+  const base = trimTrailingSlash(baseUrl);
+  const endpointCandidates = base.endsWith("/messages")
+    ? [base]
+    : [`${base}/v1/messages`, `${base}/messages`];
+  const errors = [];
+
+  for (const endpoint of endpointCandidates) {
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+          Authorization: `Bearer ${apiKey}`,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model,
+          system: systemPrompt,
+          messages: [{ role: "user", content: userPrompt }],
+          temperature: 0.5,
+          max_tokens: 500,
+        }),
+      });
+
+      const raw = await response.json();
+      if (!response.ok) {
+        errors.push(raw?.error?.message || raw?.message || `HTTP ${response.status}`);
+        continue;
+      }
+
+      const answer = extractAnthropicText(raw);
+      if (!answer) {
+        errors.push("Reponse Anthropic vide.");
+        continue;
+      }
+      return { answer, model };
+    } catch (error) {
+      errors.push(error.message);
+    }
+  }
+
+  throw new Error(errors.filter(Boolean).join(" | ") || "Erreur Anthropic");
+}
+
+async function requestOpenAiChat({ apiKey, model, systemPrompt, userPrompt }) {
+  const response = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model,
+      input: [
+        { role: "system", content: [{ type: "input_text", text: systemPrompt }] },
+        { role: "user", content: [{ type: "input_text", text: userPrompt }] },
+      ],
+      temperature: 0.5,
+      max_output_tokens: 500,
+    }),
+  });
+
+  const raw = await response.json();
+  if (!response.ok) {
+    throw new Error(raw?.error?.message || raw?.message || `HTTP ${response.status}`);
+  }
+  const answer = extractOpenAiText(raw);
+  if (!answer) throw new Error("Reponse OpenAI vide.");
+  return { answer, model };
+}
+
 app.post("/api/chat", async (req, res) => {
   try {
     if (!canUseChat(req)) {
@@ -979,16 +1076,6 @@ app.post("/api/chat", async (req, res) => {
         message: "Trop de requetes chat. Reessaie dans 1 minute.",
       });
     }
-
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
-      return res.status(500).json({
-        success: false,
-        message: "OPENAI_API_KEY manquant sur le serveur.",
-      });
-    }
-
-    const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
     const message = trimText(req.body?.message, 2000);
     const page = trimText(req.body?.context?.page || "site", 80);
     const matchId = trimText(req.body?.context?.matchId || "", 60);
@@ -1016,50 +1103,70 @@ app.post("/api/chat", async (req, res) => {
       .filter(Boolean)
       .join("\n");
 
-    const response = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model,
-        input: [
-          { role: "system", content: [{ type: "input_text", text: systemPrompt }] },
-          { role: "user", content: [{ type: "input_text", text: userPrompt }] },
-        ],
-        temperature: 0.5,
-        max_output_tokens: 500,
-      }),
-    });
+    const anthropicBaseUrl = trimText(process.env.ANTHROPIC_BASE_URL || "", 500);
+    const anthropicKey = trimText(process.env.ANTHROPIC_API_KEY || "", 500);
+    const anthropicModel =
+      trimText(process.env.ANTHROPIC_MODEL || "", 120) ||
+      trimText(process.env.ANTHROPIC_DEFAULT_OPUS_MODEL || "", 120) ||
+      trimText(process.env.ANTHROPIC_DEFAULT_SONNET_MODEL || "", 120) ||
+      "claude-opus-4-6";
+    const openAiKey = trimText(process.env.OPENAI_API_KEY || "", 500);
+    const openAiModel = trimText(process.env.OPENAI_MODEL || "", 120) || "gpt-4o-mini";
+    const errors = [];
 
-    const raw = await response.json();
-    if (!response.ok) {
-      const errMsg = raw?.error?.message || "Erreur OpenAI";
-      return res.json({
-        success: true,
-        model: "local-fallback",
-        answer: `${localChatFallback(message, { page, league, matchId })}\n\n[Info technique: ${errMsg}]`,
-      });
+    if (anthropicBaseUrl && anthropicKey) {
+      try {
+        const result = await requestAnthropicChat({
+          baseUrl: anthropicBaseUrl,
+          apiKey: anthropicKey,
+          model: anthropicModel,
+          systemPrompt,
+          userPrompt,
+        });
+        return res.json({
+          success: true,
+          provider: "anthropic",
+          model: result.model,
+          answer: result.answer,
+        });
+      } catch (error) {
+        errors.push(`Anthropic: ${error.message}`);
+      }
+    } else {
+      errors.push("Anthropic: configuration absente.");
     }
 
-    const outputText =
-      (Array.isArray(raw?.output)
-        ? raw.output
-            .flatMap((o) => (Array.isArray(o?.content) ? o.content : []))
-            .map((c) => c?.text || "")
-            .join("\n")
-            .trim()
-        : "") || "Je n'ai pas de reponse pour le moment.";
+    if (openAiKey) {
+      try {
+        const result = await requestOpenAiChat({
+          apiKey: openAiKey,
+          model: openAiModel,
+          systemPrompt,
+          userPrompt,
+        });
+        return res.json({
+          success: true,
+          provider: "openai",
+          model: result.model,
+          answer: result.answer,
+        });
+      } catch (error) {
+        errors.push(`OpenAI: ${error.message}`);
+      }
+    } else {
+      errors.push("OpenAI: configuration absente.");
+    }
 
-    res.json({
+    return res.json({
       success: true,
-      model,
-      answer: outputText,
+      provider: "local-fallback",
+      model: "local-fallback",
+      answer: `${localChatFallback(message, { page, league, matchId })}\n\n[Info technique: ${errors.join(" | ")}]`,
     });
   } catch (error) {
     res.json({
       success: true,
+      provider: "local-fallback",
       model: "local-fallback",
       answer: `${localChatFallback(req.body?.message, req.body?.context)}\n\n[Info technique: ${error.message}]`,
     });
@@ -1067,11 +1174,24 @@ app.post("/api/chat", async (req, res) => {
 });
 
 app.get("/api/chat", (_req, res) => {
+  const anthropicModel =
+    process.env.ANTHROPIC_MODEL ||
+    process.env.ANTHROPIC_DEFAULT_OPUS_MODEL ||
+    process.env.ANTHROPIC_DEFAULT_SONNET_MODEL ||
+    null;
   res.json({
     success: true,
     message: "Route chat active. Utilise POST /api/chat avec { message, context }.",
-    model: process.env.OPENAI_MODEL || "gpt-4o-mini",
-    hasApiKey: Boolean(process.env.OPENAI_API_KEY),
+    providerPriority: ["anthropic", "openai", "local-fallback"],
+    anthropic: {
+      enabled: Boolean(process.env.ANTHROPIC_BASE_URL && process.env.ANTHROPIC_API_KEY),
+      model: anthropicModel,
+      baseUrl: process.env.ANTHROPIC_BASE_URL || null,
+    },
+    openai: {
+      enabled: Boolean(process.env.OPENAI_API_KEY),
+      model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+    },
   });
 });
 
