@@ -1,7 +1,9 @@
 const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, ".env") });
 const express = require("express");
+const sharp = require("sharp");
 const { API_URL, getPenaltyMatches, getStructure, getMatchPredictionDetails, getCouponSelection, validateCouponTicket } = require("./services/liveFeed");
+const { toFeatures, deduplicate, extractRules, buildDecisionEngine, toTrainReadyCSV } = require("./services/patternEngineV2");
 
 const app = express();
 const DEFAULT_PORT = Number(process.env.PORT) || 3029;
@@ -338,6 +340,22 @@ function buildCouponStorySvg(payload = {}) {
 </svg>`;
 }
 
+function normalizeImageFormat(value, fallback = "png") {
+  const v = String(value || "").toLowerCase();
+  if (v === "jpg" || v === "jpeg") return "jpg";
+  if (v === "png") return "png";
+  if (v === "svg") return "svg";
+  return fallback;
+}
+
+async function rasterizeSvg(svg, format = "png") {
+  const buffer = Buffer.from(String(svg || ""), "utf8");
+  if (format === "jpg") {
+    return sharp(buffer).jpeg({ quality: 92, mozjpeg: true }).toBuffer();
+  }
+  return sharp(buffer).png({ compressionLevel: 9 }).toBuffer();
+}
+
 function pdfEscape(text = "") {
   return String(text)
     .replace(/\\/g, "\\\\")
@@ -660,6 +678,75 @@ app.post("/api/coupon/validate", async (req, res) => {
   }
 });
 
+app.post("/api/patterns/report", (req, res) => {
+  try {
+    const matches = Array.isArray(req.body?.matches) ? req.body.matches : [];
+    const minRulePlayed = Number(req.body?.minRulePlayed) > 0 ? Number(req.body.minRulePlayed) : 5;
+    const featureRows = matches.map(toFeatures);
+    const dedupRows = deduplicate(featureRows);
+    const totalValidated = Number(req.body?.totalValidated) > 0 ? Number(req.body.totalValidated) : dedupRows.length;
+    const engine = buildDecisionEngine(dedupRows, totalValidated, { minRulePlayed });
+    return res.json({
+      success: true,
+      totalInput: matches.length,
+      totalFeatures: featureRows.length,
+      totalDeduplicated: dedupRows.length,
+      report: engine.report,
+      rules: extractRules(dedupRows, minRulePlayed),
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Impossible de construire le rapport patterns.",
+      error: error.message,
+    });
+  }
+});
+
+app.post("/api/patterns/decide", (req, res) => {
+  try {
+    const history = Array.isArray(req.body?.history) ? req.body.history : [];
+    const candidate = req.body?.candidate || {};
+    const options = req.body?.options || {};
+    const featureRows = deduplicate(history.map(toFeatures));
+    const totalValidated = Number(req.body?.totalValidated) > 0 ? Number(req.body.totalValidated) : featureRows.length;
+    const engine = buildDecisionEngine(featureRows, totalValidated, options);
+    const decision = engine.decide(candidate);
+    const scored = engine.scoreCandidate(candidate);
+
+    return res.json({
+      success: true,
+      totalValidated,
+      historySize: featureRows.length,
+      decision,
+      previewScore: scored,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Impossible d'evaluer ce candidat.",
+      error: error.message,
+    });
+  }
+});
+
+app.post("/api/patterns/csv", (req, res) => {
+  try {
+    const matches = Array.isArray(req.body?.matches) ? req.body.matches : [];
+    const featureRows = matches.map(toFeatures);
+    const csv = toTrainReadyCSV(featureRows);
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="train_ready_export_${Date.now()}.csv"`);
+    return res.send(csv);
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Impossible de generer le CSV train-ready.",
+      error: error.message,
+    });
+  }
+});
+
 function generateCouponPdfHandler(req, res) {
   try {
     const coupon = Array.isArray(req.body?.coupon) ? req.body.coupon : [];
@@ -700,7 +787,7 @@ function generateCouponPdfHandler(req, res) {
   }
 }
 
-function generateCouponImageHandler(req, res) {
+async function generateCouponImageHandler(req, res) {
   try {
     const coupon = Array.isArray(req.body?.coupon) ? req.body.coupon : [];
     if (!coupon.length) {
@@ -718,15 +805,25 @@ function generateCouponImageHandler(req, res) {
     }
     const mode = String(req.body?.mode || "default").toLowerCase();
     const isStory = mode === "story" || mode === "snap";
+    const requested = req.body?.format || req.query?.format || (isStory ? "jpg" : "png");
+    const format = normalizeImageFormat(requested, isStory ? "jpg" : "png");
     const svg = isStory ? buildCouponStorySvg(req.body || {}) : buildCouponImageSvg(req.body || {});
-    const filename = `coupon-fc25-${isStory ? "story" : "image"}-${Date.now()}.svg`;
-    res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
+    if (format === "svg") {
+      const filename = `coupon-fc25-${isStory ? "story" : "image"}-${Date.now()}.svg`;
+      res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      return res.send(svg);
+    }
+    const output = await rasterizeSvg(svg, format);
+    const ext = format === "jpg" ? "jpg" : "png";
+    const filename = `coupon-fc25-${isStory ? "story" : "image"}-${Date.now()}.${ext}`;
+    res.setHeader("Content-Type", format === "jpg" ? "image/jpeg" : "image/png");
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
-    return res.send(svg);
+    return res.send(output);
   } catch (error) {
     return res.status(500).json({
       success: false,
-      message: "Impossible de generer l'image coupon.",
+      message: "Impossible de generer l'image coupon (PNG/JPG).",
       error: error.message,
     });
   }
@@ -781,6 +878,22 @@ async function sendTelegramDocument(botToken, chatId, fileBlob, fileName, captio
   return data?.result?.message_id || null;
 }
 
+async function sendTelegramPhoto(botToken, chatId, photoBlob, fileName, caption = "") {
+  const form = new FormData();
+  form.append("chat_id", chatId);
+  if (caption) form.append("caption", caption);
+  form.append("photo", photoBlob, fileName);
+  const res = await fetch(`https://api.telegram.org/bot${botToken}/sendPhoto`, {
+    method: "POST",
+    body: form,
+  });
+  const data = await res.json();
+  if (!res.ok || !data?.ok) {
+    throw new Error(data?.description || "API Telegram indisponible.");
+  }
+  return data?.result?.message_id || null;
+}
+
 app.post("/api/coupon/pdf", generateCouponPdfHandler);
 app.post("/api/pdf/coupon", generateCouponPdfHandler);
 app.post("/api/download/coupon", generateCouponPdfHandler);
@@ -794,9 +907,14 @@ app.post("/api/coupon/pdf/quick", (req, res) =>
   generateCouponPdfHandler({ ...req, body: { ...(req.body || {}), mode: "quick" } }, res)
 );
 app.post("/api/coupon/image", generateCouponImageHandler);
-app.post("/api/coupon/image/svg", generateCouponImageHandler);
+app.post("/api/coupon/image/svg", (req, res) =>
+  generateCouponImageHandler({ ...req, body: { ...(req.body || {}), format: "svg" } }, res)
+);
 app.post("/api/coupon/image/story", (req, res) =>
-  generateCouponImageHandler({ ...req, body: { ...(req.body || {}), mode: "story" } }, res)
+  generateCouponImageHandler(
+    { ...req, body: { ...(req.body || {}), mode: "story", format: req.body?.format || "jpg" } },
+    res
+  )
 );
 
 async function sendTelegramCouponHandler(req, res) {
@@ -833,29 +951,35 @@ async function sendTelegramCouponHandler(req, res) {
     }
 
     const sendImage = Boolean(req.body?.sendImage);
-    let telegramRes;
     if (sendImage) {
+      const fmt = normalizeImageFormat(req.body?.imageFormat || req.body?.format || "png", "png");
       const svg = buildCouponImageSvg(req.body || {});
-      const form = new FormData();
-      form.append("chat_id", chatId);
-      form.append("caption", "Coupon image - FC 25 Virtual Predictions | Signe: SOLITAIRE HACK");
-      form.append("document", new Blob([svg], { type: "image/svg+xml" }), `coupon-fc25-${Date.now()}.svg`);
-      telegramRes = await fetch(`https://api.telegram.org/bot${botToken}/sendDocument`, {
-        method: "POST",
-        body: form,
-      });
-    } else {
-      telegramRes = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chat_id: chatId,
-          text,
-          disable_web_page_preview: true,
-        }),
+      const img = await rasterizeSvg(svg, fmt === "svg" ? "png" : fmt);
+      const mime = fmt === "jpg" ? "image/jpeg" : "image/png";
+      const ext = fmt === "jpg" ? "jpg" : "png";
+      const photoId = await sendTelegramPhoto(
+        botToken,
+        chatId,
+        new Blob([img], { type: mime }),
+        `coupon-fc25-${Date.now()}.${ext}`,
+        "Coupon image - FC 25 Virtual Predictions | Signe: SOLITAIRE HACK"
+      );
+      return res.json({
+        success: true,
+        message: "Coupon image envoye sur Telegram.",
+        telegramMessageId: photoId,
       });
     }
 
+    const telegramRes = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        disable_web_page_preview: true,
+      }),
+    });
     const telegramData = await telegramRes.json();
     if (!telegramRes.ok || !telegramData?.ok) {
       return res.status(502).json({
@@ -865,9 +989,9 @@ async function sendTelegramCouponHandler(req, res) {
       });
     }
 
-    res.json({
+    return res.json({
       success: true,
-      message: sendImage ? "Coupon image envoye sur Telegram." : "Coupon envoye sur Telegram.",
+      message: "Coupon envoye sur Telegram.",
       telegramMessageId: telegramData?.result?.message_id || null,
     });
   } catch (error) {
@@ -930,12 +1054,14 @@ async function sendTelegramCouponPackHandler(req, res) {
       });
     }
 
+    const imageFormat = normalizeImageFormat(req.body?.imageFormat || "png", "png");
     const svg = buildCouponImageSvg(req.body || {});
-    const imageMessageId = await sendTelegramDocument(
+    const imageBuffer = await rasterizeSvg(svg, imageFormat === "svg" ? "png" : imageFormat);
+    const imageMessageId = await sendTelegramPhoto(
       botToken,
       chatId,
-      new Blob([svg], { type: "image/svg+xml" }),
-      `coupon-fc25-${Date.now()}.svg`,
+      new Blob([imageBuffer], { type: imageFormat === "jpg" ? "image/jpeg" : "image/png" }),
+      `coupon-fc25-${Date.now()}.${imageFormat === "jpg" ? "jpg" : "png"}`,
       "Coupon image - FC 25 Virtual Predictions | Signe: SOLITAIRE HACK"
     );
 
@@ -1065,7 +1191,10 @@ app.post("/api/chat", async (req, res) => {
       .join("\n");
 
     const anthropicBaseUrl = trimText(process.env.ANTHROPIC_BASE_URL || "", 500);
-    const anthropicKey = trimText(process.env.ANTHROPIC_API_KEY || "", 500);
+    const anthropicKey = trimText(
+      process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY || "",
+      500
+    );
     const anthropicModel =
       trimText(process.env.ANTHROPIC_MODEL || "", 120) ||
       trimText(process.env.ANTHROPIC_DEFAULT_OPUS_MODEL || "", 120) ||
@@ -1122,7 +1251,10 @@ app.get("/api/chat", (_req, res) => {
     message: "Route chat active. Utilise POST /api/chat avec { message, context }.",
     providerPriority: ["anthropic", "local-fallback"],
     anthropic: {
-      enabled: Boolean(process.env.ANTHROPIC_BASE_URL && process.env.ANTHROPIC_API_KEY),
+      enabled: Boolean(
+        process.env.ANTHROPIC_BASE_URL &&
+          (process.env.ANTHROPIC_AUTH_TOKEN || process.env.ANTHROPIC_API_KEY)
+      ),
       model: anthropicModel,
       baseUrl: process.env.ANTHROPIC_BASE_URL || null,
     },

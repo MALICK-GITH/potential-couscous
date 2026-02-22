@@ -44,9 +44,13 @@ function updateRefreshBadge() {
 
 function setMatchTelegramButtonEnabled(enabled) {
   const btn = document.getElementById("sendMatchTelegramBtn");
+  const btnImageTelegram = document.getElementById("sendMatchTelegramImageBtn");
   const pdfBtn = document.getElementById("downloadMatchPdfBtn");
+  const imageBtn = document.getElementById("downloadMatchImageBtn");
   if (btn) btn.disabled = !enabled;
+  if (btnImageTelegram) btnImageTelegram.disabled = !enabled;
   if (pdfBtn) pdfBtn.disabled = !enabled;
+  if (imageBtn) imageBtn.disabled = !enabled;
 }
 
 function startAutoRefresh() {
@@ -277,6 +281,46 @@ async function sendCurrentMatchToTelegram() {
   }
 }
 
+async function sendCurrentMatchImageToTelegram() {
+  const btn = document.getElementById("sendMatchTelegramImageBtn");
+  if (!lastDetailsData) return;
+  const selection = pickSingleSelectionFromDetails(lastDetailsData);
+  if (!selection) {
+    document.getElementById("sub").textContent = "Selection Telegram image impossible pour ce match.";
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Envoi image...";
+  }
+
+  try {
+    const payload = {
+      coupon: [selection],
+      summary: couponSummary([selection]),
+      riskProfile: "single-match",
+      sendImage: true,
+      imageFormat: "png",
+    };
+    const res = await fetch("/api/coupon/send-telegram", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok || !data?.success) throw new Error(data?.error || data?.message || "Erreur Telegram image");
+    document.getElementById("sub").textContent = "Image du ticket match envoyee sur Telegram.";
+  } catch (error) {
+    document.getElementById("sub").textContent = `Erreur Telegram image: ${error.message}`;
+  } finally {
+    if (btn) {
+      btn.textContent = "Telegram Image";
+      setMatchTelegramButtonEnabled(Boolean(lastDetailsData));
+    }
+  }
+}
+
 async function downloadCurrentMatchPdf() {
   if (!lastDetailsData) return;
   const selection = pickSingleSelectionFromDetails(lastDetailsData);
@@ -323,6 +367,52 @@ async function downloadCurrentMatchPdf() {
     document.getElementById("sub").textContent = "PDF match telecharge.";
   } catch (error) {
     document.getElementById("sub").textContent = `Erreur PDF: ${error.message}`;
+  }
+}
+
+async function downloadCurrentMatchImage() {
+  if (!lastDetailsData) return;
+  const selection = pickSingleSelectionFromDetails(lastDetailsData);
+  if (!selection) {
+    document.getElementById("sub").textContent = "Selection image impossible pour ce match.";
+    return;
+  }
+
+  try {
+    const payload = {
+      coupon: [selection],
+      summary: couponSummary([selection]),
+      riskProfile: "single-match",
+      format: "png",
+    };
+    const endpoints = ["/api/coupon/image"];
+    let blob = null;
+    let lastErr = "Erreur image";
+    for (const endpoint of endpoints) {
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        blob = await res.blob();
+        break;
+      }
+      const text = await res.text();
+      lastErr = text || `HTTP ${res.status}`;
+    }
+    if (!blob) throw new Error(lastErr);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `match-ticket-${selection.matchId}-${Date.now()}.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    document.getElementById("sub").textContent = "Image match telechargee.";
+  } catch (error) {
+    document.getElementById("sub").textContent = `Erreur image: ${error.message}`;
   }
 }
 
@@ -605,8 +695,12 @@ function init() {
   setMatchTelegramButtonEnabled(false);
   const sendBtn = document.getElementById("sendMatchTelegramBtn");
   if (sendBtn) sendBtn.addEventListener("click", sendCurrentMatchToTelegram);
+  const sendImageBtn = document.getElementById("sendMatchTelegramImageBtn");
+  if (sendImageBtn) sendImageBtn.addEventListener("click", sendCurrentMatchImageToTelegram);
   const pdfBtn = document.getElementById("downloadMatchPdfBtn");
   if (pdfBtn) pdfBtn.addEventListener("click", downloadCurrentMatchPdf);
+  const imageBtn = document.getElementById("downloadMatchImageBtn");
+  if (imageBtn) imageBtn.addEventListener("click", downloadCurrentMatchImage);
   loadData("manual");
   startAutoRefresh();
 }

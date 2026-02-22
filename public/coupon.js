@@ -322,6 +322,7 @@ async function sendCouponPackToTelegram() {
       coupon: lastCouponData.coupon,
       summary: lastCouponData.summary || {},
       riskProfile: lastCouponData.riskProfile || "balanced",
+      imageFormat: "png",
       ticketShield: {
         driftThresholdPercent: getDriftThreshold(),
         replacedSelections: adapted.replaced,
@@ -636,6 +637,7 @@ async function sendCouponToTelegram(sendImage = false) {
       summary: lastCouponData.summary || {},
       riskProfile: lastCouponData.riskProfile || "balanced",
       sendImage,
+      imageFormat: sendImage ? "png" : "png",
       ticketShield: {
         driftThresholdPercent: getDriftThreshold(),
         replacedSelections: adapted.replaced,
@@ -766,19 +768,18 @@ async function downloadCouponPdfPack() {
   }
 }
 
-async function fetchCouponImageBlob(mode = "default") {
+async function fetchCouponImageBlob(mode = "default", format = "png") {
   const insights = computeCouponInsights(lastCouponData?.coupon || [], lastCouponData?.riskProfile || "balanced");
+  const safeFormat = String(format || "").toLowerCase() === "jpg" ? "jpg" : "png";
   const payload = {
     coupon: lastCouponData.coupon,
     summary: lastCouponData.summary || {},
     riskProfile: lastCouponData.riskProfile || "balanced",
     insights,
     mode,
+    format: safeFormat,
   };
-  const endpoints =
-    mode === "story"
-      ? ["/api/coupon/image/story", "/api/coupon/image", "/api/coupon/image/svg"]
-      : ["/api/coupon/image", "/api/coupon/image/svg"];
+  const endpoints = mode === "story" ? ["/api/coupon/image/story", "/api/coupon/image"] : ["/api/coupon/image"];
   let blob = null;
   let lastErr = "Erreur image coupon";
   for (const endpoint of endpoints) {
@@ -806,11 +807,12 @@ async function downloadCouponImage(mode = "default") {
   }
   try {
     await enforceTicketShield(mode === "story" ? "export story" : "export image");
-    const blob = await fetchCouponImageBlob(mode);
+    const format = mode === "story" ? "jpg" : "png";
+    const blob = await fetchCouponImageBlob(mode, format);
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `coupon-fc25-${mode === "story" ? "story" : "image"}-${Date.now()}.svg`;
+    a.download = `coupon-fc25-${mode === "story" ? "story" : "image"}-${Date.now()}.${format}`;
     document.body.appendChild(a);
     a.click();
     a.remove();
