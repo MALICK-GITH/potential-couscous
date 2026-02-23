@@ -1109,11 +1109,63 @@ function extractAnthropicText(raw) {
     .trim();
 }
 
-async function requestAnthropicChat({ baseUrl, apiKey, model, systemPrompt, userPrompt }) {
+function extractSlokText(raw) {
+  if (!raw || typeof raw !== "object") return "";
+  return (
+    raw?.response?.text ||
+    raw?.response?.message ||
+    raw?.text ||
+    raw?.message ||
+    ""
+  )
+    .toString()
+    .trim();
+}
+
+function buildAnthropicEndpointCandidates(baseUrl) {
   const base = trimTrailingSlash(baseUrl);
-  const endpointCandidates = base.endsWith("/messages")
-    ? [base]
-    : [`${base}/v1/messages`, `${base}/messages`];
+  if (!base) return [];
+  const list = [];
+  const push = (u) => {
+    if (u && !list.includes(u)) list.push(u);
+  };
+
+  if (base.endsWith("/messages")) {
+    push(base);
+    return list;
+  }
+
+  push(`${base}/v1/messages`);
+  push(`${base}/messages`);
+
+  if (base.includes("/cliproxy-api/api/provider/")) {
+    push(base);
+    push(`${base}/messages`);
+    push(`${base}/v1/messages`);
+  } else {
+    push(`${base}/cliproxy-api/api/provider/agy`);
+    push(`${base}/cliproxy-api/api/provider/agy/messages`);
+    push(`${base}/cliproxy-api/api/provider/agy/v1/messages`);
+  }
+
+  return list;
+}
+
+async function parseResponseSafe(response) {
+  const rawText = await response.text();
+  let json = null;
+  if (rawText && rawText.trim()) {
+    try {
+      json = JSON.parse(rawText);
+    } catch (_e) {
+      json = null;
+    }
+  }
+  return { text: rawText || "", json };
+}
+
+async function requestAnthropicChat({ baseUrl, apiKey, model, systemPrompt, userPrompt }) {
+  const endpointCandidates = buildAnthropicEndpointCandidates(baseUrl);
   const errors = [];
 
   for (const endpoint of endpointCandidates) {
@@ -1123,6 +1175,8 @@ async function requestAnthropicChat({ baseUrl, apiKey, model, systemPrompt, user
         headers: {
           "Content-Type": "application/json",
           "x-api-key": apiKey,
+          "x-auth-token": apiKey,
+          "anthropic-api-key": apiKey,
           Authorization: `Bearer ${apiKey}`,
           "anthropic-version": "2023-06-01",
         },
@@ -1135,24 +1189,152 @@ async function requestAnthropicChat({ baseUrl, apiKey, model, systemPrompt, user
         }),
       });
 
-      const raw = await response.json();
+      const parsed = await parseResponseSafe(response);
+      const raw = parsed.json;
       if (!response.ok) {
-        errors.push(raw?.error?.message || raw?.message || `HTTP ${response.status}`);
+        const msg =
+          raw?.error?.message ||
+          raw?.message ||
+          (parsed.text.startsWith("<!DOCTYPE") || parsed.text.startsWith("<html")
+            ? "Reponse HTML recue (endpoint non API). Use /v1/ or /cliproxy-api/ endpoints"
+            : parsed.text.slice(0, 180)) ||
+          `HTTP ${response.status}`;
+        errors.push(`${endpoint} -> ${msg}`);
+        continue;
+      }
+
+      if (!raw) {
+        errors.push(`${endpoint} -> reponse non-JSON recue.`);
         continue;
       }
 
       const answer = extractAnthropicText(raw);
       if (!answer) {
-        errors.push("Reponse Anthropic vide.");
+        errors.push(`${endpoint} -> reponse Anthropic vide.`);
         continue;
       }
       return { answer, model };
     } catch (error) {
-      errors.push(error.message);
+      errors.push(`${endpoint} -> ${error.message}`);
     }
   }
 
   throw new Error(errors.filter(Boolean).join(" | ") || "Erreur Anthropic");
+}
+
+function buildSlokEndpointCandidates(baseUrl) {
+  const base = trimTrailingSlash(baseUrl);
+  const out = [];
+  const push = (u) => {
+    if (u && !out.includes(u)) out.push(u);
+  };
+  if (!base) return out;
+  if (base.endsWith("/api/v2/chatgpt")) push(base);
+  push(`${base}/api/v2/chatgpt`);
+  if (base.includes("orbit-provider.com")) push("https://yellowfire.ru/api/v2/chatgpt");
+  return out;
+}
+
+function slokRootFromChatEndpoint(endpoint) {
+  const e = trimTrailingSlash(endpoint);
+  if (e.endsWith("/api/v2/chatgpt")) return e.slice(0, -"/api/v2/chatgpt".length);
+  return e;
+}
+
+async function requestSlokChat({ baseUrl, apiKey, model, systemPrompt, userPrompt }) {
+  const endpointCandidates = buildSlokEndpointCandidates(baseUrl);
+  const errors = [];
+  for (const endpoint of endpointCandidates) {
+    try {
+      const mergedPrompt = [systemPrompt, userPrompt].filter(Boolean).join("\n\n");
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "api-key": apiKey,
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          prompt: mergedPrompt,
+          chat_history: [],
+          file_base64: "",
+          internet_access: false,
+          mime_type: "",
+        }),
+      });
+      const parsed = await parseResponseSafe(response);
+      if (!response.ok) {
+        const msg =
+          parsed.json?.error?.message ||
+          parsed.json?.message ||
+          parsed.text.slice(0, 180) ||
+          `HTTP ${response.status}`;
+        errors.push(`${endpoint} -> ${msg}`);
+        continue;
+      }
+      const start = parsed.json;
+      if (!start) {
+        errors.push(`${endpoint} -> reponse non-JSON recue.`);
+        continue;
+      }
+      if (start?.error) {
+        errors.push(`${endpoint} -> ${start.error}`);
+        continue;
+      }
+      const requestId = start?.request_id;
+      if (!requestId) {
+        const directAnswer = extractSlokText(start);
+        if (directAnswer) return { answer: directAnswer, model };
+        errors.push(`${endpoint} -> request_id absent.`);
+        continue;
+      }
+
+      const waitSec = Math.max(0.1, Number(start?.wait || 1));
+      await new Promise((r) => setTimeout(r, Math.round(waitSec * 1000)));
+      const statusEndpoint = `${slokRootFromChatEndpoint(endpoint)}/api/v2/status/${encodeURIComponent(requestId)}`;
+
+      let answer = "";
+      let statusErr = "";
+      for (let i = 0; i < 80; i += 1) {
+        const statusRes = await fetch(statusEndpoint, {
+          method: "GET",
+          headers: {
+            "api-key": apiKey,
+            Authorization: `Bearer ${apiKey}`,
+          },
+        });
+        const statusParsed = await parseResponseSafe(statusRes);
+        const statusJson = statusParsed.json;
+        if (!statusRes.ok) {
+          statusErr = statusParsed.text.slice(0, 160) || `HTTP ${statusRes.status}`;
+          break;
+        }
+        if (!statusJson) {
+          statusErr = "status non-JSON";
+          break;
+        }
+        if (statusJson?.error) {
+          statusErr = String(statusJson.error);
+          break;
+        }
+        answer = extractSlokText(statusJson);
+        if (statusJson?.status === "success" && answer) {
+          return { answer, model };
+        }
+        if (statusJson?.status === "failed") {
+          statusErr = "status failed";
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 350));
+      }
+      if (answer) return { answer, model };
+      errors.push(`${statusEndpoint} -> ${statusErr || "timeout sans reponse"}`);
+    } catch (error) {
+      errors.push(`${endpoint} -> ${error.message}`);
+    }
+  }
+  throw new Error(errors.filter(Boolean).join(" | ") || "Erreur Slok API");
 }
 
 app.post("/api/chat", async (req, res) => {
@@ -1176,12 +1358,15 @@ app.post("/api/chat", async (req, res) => {
     }
 
     const systemPrompt =
-      "Tu es SOLITAIRE AI, assistant du site FC 25 Virtual Predictions. " +
-      "Reponds en francais simple, direct, utile. " +
-      "Tu analyses matchs, cotes, coupon, risque, et validation ticket. " +
-      "Tu ne promets jamais un gain garanti. Tu donnes des options prudentes.";
+      "Tu es SOLITAIRE AI, assistant integre au site FC 25 Virtual Predictions. " +
+      "Reponds en francais, ton direct, concret et court (1 a 4 phrases). " +
+      "Reste centre sur le site: matchs, cotes, coupon, risque, validation ticket. " +
+      "N'ecris pas de reponses generiques de chatbot. " +
+      "Quand on te demande si tu vois le site, reponds: tu ne vois pas l'ecran en direct, mais tu utilises le contexte de page fourni (page, ligue, match). " +
+      "Tu ne promets jamais un gain garanti et tu proposes des options prudentes.";
 
     const userPrompt = [
+      "Mode: assistant du site, pas assistant general.",
       `Contexte page: ${page}`,
       matchId ? `Match ID: ${matchId}` : "",
       league ? `Ligue: ${league}` : "",
@@ -1219,6 +1404,24 @@ app.post("/api/chat", async (req, res) => {
         });
       } catch (error) {
         errors.push(`Anthropic: ${error.message}`);
+      }
+
+      try {
+        const slokResult = await requestSlokChat({
+          baseUrl: anthropicBaseUrl,
+          apiKey: anthropicKey,
+          model: anthropicModel,
+          systemPrompt,
+          userPrompt,
+        });
+        return res.json({
+          success: true,
+          provider: "slok",
+          model: slokResult.model,
+          answer: slokResult.answer,
+        });
+      } catch (error) {
+        errors.push(`Slok: ${error.message}`);
       }
     } else {
       errors.push("Anthropic: configuration absente.");
