@@ -6,10 +6,24 @@
     const matchId = params.get("id") || "";
     const leagueSelect = document.getElementById("leagueSelect");
     const league = leagueSelect ? String(leagueSelect.value || "") : "";
+    const sizeInput = document.getElementById("sizeInput");
+    const riskSelect = document.getElementById("riskSelect");
+    const cardsVisible = document.querySelectorAll(".match-card, .match-item, .match-row, .match").length;
+    const title = document.querySelector("h1")?.textContent?.trim() || "";
+
     return {
       page: window.location.pathname,
       matchId,
       league,
+      realtime: {
+        now: Date.now(),
+        online: navigator.onLine,
+        viewport: `${window.innerWidth}x${window.innerHeight}`,
+        title,
+        cardsVisible,
+        couponSize: sizeInput ? Number(sizeInput.value || 0) : null,
+        couponRisk: riskSelect ? String(riskSelect.value || "") : null,
+      },
     };
   }
 
@@ -43,7 +57,10 @@
     panel.innerHTML = `
       <div class="chat-head">
         <span>SOLITAIRE AI</span>
-        <button type="button" class="chat-close">X</button>
+        <div class="chat-head-actions">
+          <button type="button" class="chat-clear">Effacer</button>
+          <button type="button" class="chat-close">X</button>
+        </div>
       </div>
       <div class="chat-log" id="chatLog"></div>
       <form class="chat-form" id="chatForm">
@@ -59,6 +76,7 @@
     const form = panel.querySelector("#chatForm");
     const input = panel.querySelector("#chatInput");
     const closeBtn = panel.querySelector(".chat-close");
+    const clearBtn = panel.querySelector(".chat-clear");
     let busy = false;
     let history = loadHistory();
 
@@ -87,6 +105,32 @@
     });
 
     closeBtn.addEventListener("click", () => panel.classList.add("chat-hidden"));
+    clearBtn.addEventListener("click", () => {
+      history = [];
+      saveHistory(history);
+      push("ai", "Historique efface. Je suis pret pour une nouvelle session.");
+    });
+
+    function applyAction(action) {
+      if (!action || typeof action !== "object") return;
+      const type = String(action.type || "");
+      if (type === "open_page" && action.target) {
+        window.location.href = String(action.target);
+      } else if (type === "refresh_page") {
+        window.location.reload();
+      } else if (type === "clear_chat") {
+        history = [];
+        saveHistory(history);
+        push("ai", "Chat efface par commande IA.");
+      } else if (type === "set_coupon_form") {
+        const sizeInput = document.getElementById("sizeInput");
+        const riskSelect = document.getElementById("riskSelect");
+        const leagueSelect = document.getElementById("leagueSelect");
+        if (sizeInput && action.size) sizeInput.value = String(action.size);
+        if (riskSelect && action.risk) riskSelect.value = String(action.risk);
+        if (leagueSelect && action.league) leagueSelect.value = String(action.league);
+      }
+    }
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -111,6 +155,8 @@
           throw new Error(data.message || data.error || "Erreur chat");
         }
         push("ai", data.answer || "Aucune reponse.");
+        const actions = Array.isArray(data.actions) ? data.actions : [];
+        for (const a of actions) applyAction(a);
       } catch (err) {
         push("ai", `Erreur: ${err.message}`);
       } finally {

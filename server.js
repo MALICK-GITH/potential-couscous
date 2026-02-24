@@ -123,6 +123,19 @@ function localChatFallback(message, context = {}) {
   const league = String(context.league || "toutes les ligues");
   const matchId = String(context.matchId || "");
 
+  if (
+    text.includes("site") ||
+    text.includes("que sais") ||
+    text.includes("comment utiliser") ||
+    text.includes("mode emploi")
+  ) {
+    return (
+      "Je connais le site: page matchs live (/), detail match (/match.html?id=...), coupon builder (/coupon.html), " +
+      "guide complet (/mode-emploi.html), page createur (/about.html), page developpeur (/developpeur.html). " +
+      "Pour bien utiliser le coupon: choisis taille + ligue + profil risque, genere, valide ticket, puis exporte en PDF/PNG/JPG ou envoie Telegram."
+    );
+  }
+
   if (text.includes("coupon")) {
     return (
       `Mode local actif (API IA indisponible). Sur ${page}, prends un profil Equilibre, ` +
@@ -144,6 +157,121 @@ function localChatFallback(message, context = {}) {
   return (
     "Mode local actif (quota IA atteint). Je peux quand meme aider: tri matchs, niveau de risque, construction coupon et validation."
   );
+}
+
+function buildSiteKnowledgeBlock() {
+  return [
+    "BASE CONNAISSANCE SITE FC 25 VIRTUAL PREDICTIONS:",
+    "- Pages: / (matchs live), /match.html?id=... (detail match), /coupon.html (coupon builder), /mode-emploi.html (guide), /about.html (createur), /developpeur.html (contacts).",
+    "- Donnees matchs: API 1xBet LiveFeed (sport FIFA virtuel), tri ligue, statut match, cotes 1X2 et marches additionnels.",
+    "- Detail match: decision maitre, bots, top 3 recommandations, Neural Match Engine, alertes drift cotes.",
+    "- Coupon: generation optimisee par risque (safe/balanced/aggressive), validation ticket, remplacement selections faibles.",
+    "- Exports: PDF coupon (resume/rapide/detaille), image coupon PNG/JPG, snap story JPG, image ticket match individuel.",
+    "- Telegram: envoi texte, image, pack (texte+image+PDF), signature SOLITAIRE HACK.",
+    "- Regle metier critique: aucun coupon garanti gagnant; filtrer de preference les matchs non demarres.",
+    "- IA: doit donner conseils prudents, concrets, orientes actions dans le site.",
+  ].join("\n");
+}
+
+function deriveControlActions(message, context = {}) {
+  const text = normalizeTeamKey(message || "");
+  const actions = [];
+
+  if (text.includes("ouvre coupon") || text.includes("page coupon")) {
+    actions.push({ type: "open_page", target: "/coupon.html" });
+  }
+  if (text.includes("ouvre match") && context.matchId) {
+    actions.push({ type: "open_page", target: `/match.html?id=${encodeURIComponent(context.matchId)}` });
+  }
+  if (text.includes("retour match") || text.includes("accueil")) {
+    actions.push({ type: "open_page", target: "/" });
+  }
+  if (text.includes("mode emploi") || text.includes("guide")) {
+    actions.push({ type: "open_page", target: "/mode-emploi.html" });
+  }
+  if (text.includes("refresh") || text.includes("actualise") || text.includes("rafraich")) {
+    actions.push({ type: "refresh_page" });
+  }
+  if (text.includes("efface chat") || text.includes("vider chat") || text.includes("clear chat")) {
+    actions.push({ type: "clear_chat" });
+  }
+
+  // Simple parse "coupon 3 matchs safe"
+  const sizeMatch = text.match(/(\d{1,2})\s*match/);
+  const isCouponIntent = text.includes("coupon") || text.includes("ticket");
+  if (isCouponIntent) {
+    const size = sizeMatch ? Math.max(1, Math.min(12, Number(sizeMatch[1]))) : null;
+    const risk = text.includes("safe")
+      ? "safe"
+      : text.includes("agress")
+      ? "aggressive"
+      : text.includes("equilibre")
+      ? "balanced"
+      : null;
+    const league = context.league && context.league !== "all" ? context.league : null;
+    if (size || risk || league) {
+      actions.push({
+        type: "set_coupon_form",
+        size: size || undefined,
+        risk: risk || undefined,
+        league: league || undefined,
+      });
+    }
+  }
+
+  return actions;
+}
+
+const runtimeContextCache = {
+  at: 0,
+  summary: "",
+};
+
+async function buildDynamicRuntimeContext({ page, league, matchId }) {
+  const lines = [];
+  const now = Date.now();
+
+  if (matchId) {
+    try {
+      const details = await getMatchPredictionDetails(matchId);
+      const m = details?.match || {};
+      const master = details?.prediction?.maitre?.decision_finale || {};
+      lines.push(
+        `MATCH_COURANT: ${m.teamHome || "?"} vs ${m.teamAway || "?"} | Ligue: ${m.league || league || "?"} | Pari maitre: ${master.pari_choisi || "N/A"} | Confiance: ${master.confiance_numerique ?? 0}%`
+      );
+    } catch (_e) {
+      lines.push(`MATCH_COURANT: indisponible pour id ${matchId}`);
+    }
+  }
+
+  // Cache court pour eviter de recharger les matchs a chaque message
+  const cacheFresh = now - runtimeContextCache.at < 30_000 && runtimeContextCache.summary;
+  if (cacheFresh) {
+    lines.push(runtimeContextCache.summary);
+  } else {
+    try {
+      const listing = await getPenaltyMatches();
+      const matches = Array.isArray(listing?.matches) ? listing.matches : [];
+      const upcoming = matches.filter((x) => Number(x?.startTimeUnix || 0) > Math.floor(Date.now() / 1000));
+      const byLeague = new Map();
+      for (const m of upcoming) {
+        const key = String(m?.league || "Autre");
+        byLeague.set(key, (byLeague.get(key) || 0) + 1);
+      }
+      const topLeague = [...byLeague.entries()].sort((a, b) => b[1] - a[1])[0];
+      const summary =
+        `ETAT_SITE: matchs=${matches.length}, a_venir=${upcoming.length}` +
+        (topLeague ? `, ligue_top="${topLeague[0]}" (${topLeague[1]})` : "");
+      runtimeContextCache.at = now;
+      runtimeContextCache.summary = summary;
+      lines.push(summary);
+    } catch (_e) {
+      lines.push("ETAT_SITE: indisponible");
+    }
+  }
+
+  lines.push(`PAGE_ACTIVE: ${page || "site"}${league ? ` | FILTRE_LIGUE: ${league}` : ""}`);
+  return lines.join("\n");
 }
 
 function formatOddForTelegram(value) {
@@ -1357,16 +1485,22 @@ app.post("/api/chat", async (req, res) => {
       });
     }
 
+    const siteKnowledge = buildSiteKnowledgeBlock();
+
     const systemPrompt =
       "Tu es SOLITAIRE AI, assistant integre au site FC 25 Virtual Predictions. " +
       "Reponds en francais, ton direct, concret et court (1 a 4 phrases). " +
       "Reste centre sur le site: matchs, cotes, coupon, risque, validation ticket. " +
       "N'ecris pas de reponses generiques de chatbot. " +
       "Quand on te demande si tu vois le site, reponds: tu ne vois pas l'ecran en direct, mais tu utilises le contexte de page fourni (page, ligue, match). " +
-      "Tu ne promets jamais un gain garanti et tu proposes des options prudentes.";
+      "Tu ne promets jamais un gain garanti et tu proposes des options prudentes.\n\n" +
+      siteKnowledge;
+
+    const runtimeContext = await buildDynamicRuntimeContext({ page, league, matchId });
 
     const userPrompt = [
       "Mode: assistant du site, pas assistant general.",
+      `Contexte runtime:\n${runtimeContext}`,
       `Contexte page: ${page}`,
       matchId ? `Match ID: ${matchId}` : "",
       league ? `Ligue: ${league}` : "",
@@ -1386,6 +1520,7 @@ app.post("/api/chat", async (req, res) => {
       trimText(process.env.ANTHROPIC_DEFAULT_SONNET_MODEL || "", 120) ||
       "claude-opus-4-6";
     const errors = [];
+    const actions = deriveControlActions(message, { page, league, matchId });
 
     if (anthropicBaseUrl && anthropicKey) {
       try {
@@ -1401,6 +1536,7 @@ app.post("/api/chat", async (req, res) => {
           provider: "anthropic",
           model: result.model,
           answer: result.answer,
+          actions,
         });
       } catch (error) {
         errors.push(`Anthropic: ${error.message}`);
@@ -1419,6 +1555,7 @@ app.post("/api/chat", async (req, res) => {
           provider: "slok",
           model: slokResult.model,
           answer: slokResult.answer,
+          actions,
         });
       } catch (error) {
         errors.push(`Slok: ${error.message}`);
@@ -1432,6 +1569,7 @@ app.post("/api/chat", async (req, res) => {
       provider: "local-fallback",
       model: "local-fallback",
       answer: `${localChatFallback(message, { page, league, matchId })}\n\n[Info technique: ${errors.join(" | ")}]`,
+      actions,
     });
   } catch (error) {
     res.json({
@@ -1439,6 +1577,7 @@ app.post("/api/chat", async (req, res) => {
       provider: "local-fallback",
       model: "local-fallback",
       answer: `${localChatFallback(req.body?.message, req.body?.context)}\n\n[Info technique: ${error.message}]`,
+      actions: deriveControlActions(req.body?.message, req.body?.context || {}),
     });
   }
 });
