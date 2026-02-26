@@ -1,5 +1,33 @@
 (function initChatWidget() {
   const key = "fc25_chat_history_v1";
+  const GLOBAL_REFRESH_KEY_MATCH = "fc25_page_refresh_minutes_v1";
+  const GLOBAL_REFRESH_KEY_COUPON = "fc25_coupon_refresh_minutes_v1";
+  const GLOBAL_REFRESH_DEFAULT_MIN = 5;
+
+  function getGlobalRefreshMinutes() {
+    const fromMatch = Number(localStorage.getItem(GLOBAL_REFRESH_KEY_MATCH));
+    const fromCoupon = Number(localStorage.getItem(GLOBAL_REFRESH_KEY_COUPON));
+    const raw = Number.isFinite(fromMatch) ? fromMatch : Number.isFinite(fromCoupon) ? fromCoupon : GLOBAL_REFRESH_DEFAULT_MIN;
+    return Math.max(1, Math.min(60, raw));
+  }
+
+  function startGlobalAutoRefresh() {
+    if (window.__globalAutoRefreshStarted) return;
+    window.__globalAutoRefreshStarted = true;
+
+    const hasDedicatedTimer =
+      Boolean(document.getElementById("refreshMinutesInput")) ||
+      Boolean(document.getElementById("refreshMinutesCouponInput"));
+    if (hasDedicatedTimer) return;
+
+    const minutes = getGlobalRefreshMinutes();
+    const ms = minutes * 60 * 1000;
+    setInterval(() => {
+      if (document.visibilityState === "visible") {
+        window.location.reload();
+      }
+    }, ms);
+  }
 
   function compactText(value, max = 140) {
     const t = String(value || "").replace(/\s+/g, " ").trim();
@@ -262,8 +290,12 @@
   }
 
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", createUI);
+    document.addEventListener("DOMContentLoaded", () => {
+      startGlobalAutoRefresh();
+      createUI();
+    });
   } else {
+    startGlobalAutoRefresh();
     createUI();
   }
 })();
