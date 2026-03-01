@@ -372,6 +372,12 @@ function deriveControlActions(message, context = {}) {
     if (text.includes("pdf rapide")) actions.push({ type: "site_control", name: "download_pdf_quick" });
     if (text.includes("pdf detail")) actions.push({ type: "site_control", name: "download_pdf_detailed" });
     if (text.includes("pdf")) actions.push({ type: "site_control", name: "download_pdf_summary" });
+    if (text.includes("print a4") || text.includes("impression a4") || text.includes("ticket imprimable")) {
+      actions.push({ type: "site_control", name: "print_a4" });
+    }
+    if (text.includes("journal performance") || text.includes("analyser journal")) {
+      actions.push({ type: "site_control", name: "analyze_journal" });
+    }
     if (text.includes("image coupon")) actions.push({ type: "site_control", name: "download_image" });
     if (text.includes("story")) actions.push({ type: "site_control", name: "download_story" });
   }
@@ -870,6 +876,115 @@ function getStartedSelections(coupon = []) {
     const start = Number(pick?.startTimeUnix || 0);
     return Number.isFinite(start) && start > 0 && start <= nowSec;
   });
+}
+
+function buildPrintableCouponHtml(payload = {}) {
+  const coupon = Array.isArray(payload.coupon) ? payload.coupon : [];
+  const summary = payload.summary || {};
+  const riskProfile = String(payload.riskProfile || "balanced");
+  const generatedAt = formatDateTime(new Date());
+  const combinedOdd = formatOddForTelegram(summary.combinedOdd);
+  const avgConf = Number(summary.averageConfidence) || 0;
+
+  const shareText = [
+    "FC25 Coupon",
+    `Date ${generatedAt}`,
+    `Profil ${riskProfile}`,
+    `Cote ${combinedOdd}`,
+    ...coupon.slice(0, 8).map((p, i) => `${i + 1}. ${p?.teamHome || "Equipe 1"} vs ${p?.teamAway || "Equipe 2"} | ${p?.pari || "-"} | ${formatOddForTelegram(p?.cote)}`),
+  ].join(" | ");
+  const qrUrl = `https://quickchart.io/qr?size=190&text=${encodeURIComponent(shareText)}`;
+
+  const rows = coupon
+    .map((p, i) => {
+      const home = escapeXml(p?.teamHome || "Equipe 1");
+      const away = escapeXml(p?.teamAway || "Equipe 2");
+      const league = escapeXml(p?.league || "Non specifiee");
+      const pari = escapeXml(p?.pari || "-");
+      const odd = formatOddForTelegram(p?.cote);
+      const conf = Number(p?.confiance) || 0;
+      const startAt = escapeXml(formatMatchStartTimeUnix(p?.startTimeUnix));
+      return `
+        <tr>
+          <td>${i + 1}</td>
+          <td>${home} vs ${away}</td>
+          <td>${league}</td>
+          <td>${startAt}</td>
+          <td>${pari}</td>
+          <td>${odd}</td>
+          <td>${conf.toFixed(1)}%</td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  return `<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Coupon A4 FC25</title>
+  <style>
+    @page { size: A4 portrait; margin: 12mm; }
+    body { margin: 0; font-family: Arial, Helvetica, sans-serif; color: #0f1a2f; background: #fff; }
+    .wrap { width: 100%; }
+    .head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+    .title { font-size: 24px; font-weight: 800; margin: 0 0 4px; }
+    .sub { margin: 0; font-size: 13px; color: #324868; line-height: 1.4; }
+    .qr { border: 1px solid #d5deea; border-radius: 8px; padding: 8px; }
+    .meta { margin: 10px 0 14px; display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: #31486a; }
+    .pill { border: 1px solid #d0daea; border-radius: 999px; padding: 4px 10px; background: #f6f9ff; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th, td { border: 1px solid #d7e0ec; padding: 7px; text-align: left; vertical-align: top; }
+    th { background: #eef4ff; color: #1b355d; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+    tbody tr:nth-child(even) { background: #fbfdff; }
+    .foot { margin-top: 12px; font-size: 11px; color: #4c607d; display: flex; justify-content: space-between; }
+    .print-btn { margin-top: 12px; padding: 8px 12px; border: 0; background: #123b7a; color: white; border-radius: 6px; font-weight: 700; }
+    @media print { .print-btn { display: none; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="head">
+      <div>
+        <h1 class="title">FC 25 Coupon Ticket A4</h1>
+        <p class="sub">Genere le ${escapeXml(generatedAt)}</p>
+        <p class="sub">Signe: SOLITAIRE HACK</p>
+      </div>
+      <div class="qr">
+        <img src="${qrUrl}" width="160" height="160" alt="QR Coupon"/>
+      </div>
+    </div>
+    <div class="meta">
+      <span class="pill">Profil: ${escapeXml(riskProfile)}</span>
+      <span class="pill">Selections: ${Number(summary.totalSelections) || coupon.length}</span>
+      <span class="pill">Cote combinee: ${combinedOdd}</span>
+      <span class="pill">Confiance moyenne: ${avgConf.toFixed(1)}%</span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Match</th>
+          <th>Ligue</th>
+          <th>Heure match</th>
+          <th>Pari</th>
+          <th>Cote</th>
+          <th>Confiance</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows}
+      </tbody>
+    </table>
+    <div class="foot">
+      <span>Document interne ticket</span>
+      <span>Aucune combinaison n'est garantie gagnante</span>
+    </div>
+    <button class="print-btn" onclick="window.print()">Imprimer</button>
+  </div>
+</body>
+</html>`;
 }
 
 app.get("/api/team-badge", (req, res) => {
@@ -1930,6 +2045,20 @@ app.post("/api/chat", async (req, res) => {
       }\n\n[Info technique: ${error.message}]`,
       actions: deriveControlActions(req.body?.message, req.body?.context || {}),
     });
+  }
+});
+
+app.post("/api/coupon/print-a4", (req, res) => {
+  try {
+    const coupon = Array.isArray(req.body?.coupon) ? req.body.coupon : [];
+    if (!coupon.length) {
+      return res.status(400).send("Coupon vide.");
+    }
+    const html = buildPrintableCouponHtml(req.body || {});
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    return res.send(html);
+  } catch (error) {
+    return res.status(500).send(`Erreur impression: ${error.message}`);
   }
 });
 

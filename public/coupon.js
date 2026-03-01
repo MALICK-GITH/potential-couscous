@@ -15,8 +15,26 @@ const LADDER_PROFILES = [
 ];
 const AUTO_COUPON_STORAGE_KEY = "fc25_auto_coupon_v1";
 const PAGE_REFRESH_COUPON_STORAGE_KEY = "fc25_coupon_refresh_minutes_v1";
+const PERFORMANCE_LOG_KEY = "fc25_performance_log_v1";
 const DEFAULT_PAGE_REFRESH_MINUTES = 5;
 let pageRefreshCouponIntervalId = null;
+const stabilityCache = new Map();
+
+function clamp(n, min, max) {
+  return Math.max(min, Math.min(max, n));
+}
+
+function formatDateTime(v) {
+  const d = v instanceof Date ? v : new Date(v);
+  if (Number.isNaN(d.getTime())) return "-";
+  return d.toLocaleString("fr-FR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
 
 function toNumber(v, fallback = 0) {
   const n = Number(v);
@@ -341,6 +359,7 @@ function updateSendButtonState() {
   const packBtn = document.getElementById("sendPackBtn");
   const ladderTgBtn = document.getElementById("sendLadderTelegramBtn");
   const imageTelegramBtn = document.getElementById("sendTelegramImageBtn");
+  const printBtn = document.getElementById("printA4Btn");
   const stickyBtn = document.getElementById("sendTelegramBtnSticky");
   const stickyImageBtn = document.getElementById("sendTelegramImageBtnSticky");
   const replaceWeakBtn = document.getElementById("replaceWeakBtn");
@@ -356,6 +375,7 @@ function updateSendButtonState() {
   if (packBtn) packBtn.disabled = !enabled;
   if (ladderTgBtn) ladderTgBtn.disabled = !(lastLadderData && Array.isArray(lastLadderData.items) && lastLadderData.items.length > 0);
   if (imageTelegramBtn) imageTelegramBtn.disabled = !enabled;
+  if (printBtn) printBtn.disabled = !enabled;
   if (stickyBtn) stickyBtn.disabled = !enabled;
   if (stickyImageBtn) stickyImageBtn.disabled = !enabled;
   if (replaceWeakBtn) replaceWeakBtn.disabled = !enabled;
@@ -447,6 +467,7 @@ async function sendLadderToTelegram() {
   }
   if (panel) panel.innerHTML = "<p>Envoi Ladder vers Telegram...</p>";
   try {
+    await refreshLadderBeforeTelegram();
     const res = await fetch("/api/coupon/ladder/send-telegram", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -465,6 +486,150 @@ async function sendLadderToTelegram() {
   }
 }
 
+function readPerformanceLog() {
+  try {
+    const raw = localStorage.getItem(PERFORMANCE_LOG_KEY);
+    const parsed = JSON.parse(raw || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writePerformanceLog(items) {
+  localStorage.setItem(PERFORMANCE_LOG_KEY, JSON.stringify(items.slice(0, 600)));
+}
+
+function oddsBucket(odd) {
+  const o = Number(odd);
+  if (!Number.isFinite(o) || o <= 0) return "unknown";
+  if (o < 2) return "1.00-1.99";
+  if (o < 2.2) return "2.00-2.19";
+  if (o < 3) return "2.20-2.99";
+  return "3.00+";
+}
+
+function classifyOptionType(pari = "") {
+  const t = normalizeText(pari);
+  if (t.includes("handicap")) return "handicap";
+  if (t.includes("double chance") || t.includes("1x") || t.includes("x2")) return "double_chance";
+  if (t.includes("plus de") || t.includes("over")) return "over";
+  if (t.includes("moins de") || t.includes("under")) return "under";
+  if (t.includes("v1") || t.includes("v2") || t.includes("nul") || t.includes("1x2")) return "1x2";
+  return "autre";
+}
+
+function addPerformanceFromValidation(report) {
+  if (!report || !Array.isArray(report.validatedSelections) || !lastCouponData?.coupon?.length) return;
+  const now = new Date().toISOString();
+  const byMatch = new Map(lastCouponData.coupon.map((p) => [String(p.matchId), p]));
+  const prev = readPerformanceLog();
+  const next = [];
+  for (const row of report.validatedSelections) {
+    const pick = byMatch.get(String(row.matchId));
+    if (!pick) continue;
+    const ok = String(row.status || "") === "ok";
+    next.push({
+      at: now,
+      league: pick.league || row.league || "Inconnue",
+      optionType: classifyOptionType(pick.pari),
+      odd: Number(pick.cote) || 0,
+      quality: ok ? 1 : 0,
+      riskProfile: lastCouponData.riskProfile || "balanced",
+    });
+  }
+  if (!next.length) return;
+  writePerformanceLog([...next, ...prev]);
+}
+
+function aggregatePerformance(entries, keyName) {
+  const map = new Map();
+  for (const e of entries) {
+    const key = String(e?.[keyName] || "Inconnu");
+    if (!map.has(key)) map.set(key, { key, n: 0, q: 0 });
+    const cur = map.get(key);
+    cur.n += 1;
+    cur.q += Number(e.quality) || 0;
+  }
+  return [...map.values()]
+    .map((x) => ({
+      key: x.key,
+      count: x.n,
+      score: Number(((x.q / Math.max(1, x.n)) * 100).toFixed(1)),
+    }))
+    .sort((a, b) => b.score - a.score || b.count - a.count);
+}
+
+function renderPerformanceJournal() {
+  const panel = document.getElementById("performancePanel");
+  if (!panel) return;
+  const entries = readPerformanceLog();
+  if (!entries.length) {
+    panel.innerHTML = "<h3>Journal Performance</h3><p>Aucune donnee pour le moment.</p>";
+    return;
+  }
+  const byLeague = aggregatePerformance(entries, "league").slice(0, 5);
+  const byType = aggregatePerformance(entries, "optionType").slice(0, 5);
+  const byProfile = aggregatePerformance(entries, "riskProfile");
+
+  const withBucket = entries.map((x) => ({ ...x, oddBucket: oddsBucket(x.odd) }));
+  const byOddBucket = aggregatePerformance(withBucket, "oddBucket").slice(0, 4);
+  const bestProfile = byProfile[0]?.key || "balanced";
+
+  const toLines = (arr, label) =>
+    arr
+      .map((x, i) => `<li><strong>${i + 1}. ${x.key}</strong> | ${label}: ${x.score}% | Volume: ${x.count}</li>`)
+      .join("");
+
+  panel.innerHTML = `
+    <h3>Journal Performance</h3>
+    <div class="meta">
+      <span>Observations: ${entries.length}</span>
+      <span>Profil recommande: ${bestProfile.toUpperCase()}</span>
+    </div>
+    <p><strong>Par ligue</strong></p>
+    <ul class="validation-list">${toLines(byLeague, "Score qualite") || "<li>Aucune donnee</li>"}</ul>
+    <p><strong>Par type de pari</strong></p>
+    <ul class="validation-list">${toLines(byType, "Score qualite") || "<li>Aucune donnee</li>"}</ul>
+    <p><strong>Par tranche de cote</strong></p>
+    <ul class="validation-list">${toLines(byOddBucket, "Score qualite") || "<li>Aucune donnee</li>"}</ul>
+  `;
+
+  const riskSelect = document.getElementById("riskSelect");
+  if (riskSelect && entries.length >= 8 && MULTI_PROFILES.includes(bestProfile)) {
+    riskSelect.value = bestProfile;
+  }
+}
+
+async function openPrintA4Mode() {
+  const panel = document.getElementById("validation");
+  if (!lastCouponData?.coupon?.length) {
+    if (panel) panel.innerHTML = "<p>Genere d'abord un coupon.</p>";
+    return;
+  }
+  try {
+    const res = await fetch("/api/coupon/print-a4", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        coupon: lastCouponData.coupon,
+        summary: lastCouponData.summary || {},
+        riskProfile: lastCouponData.riskProfile || "balanced",
+      }),
+    });
+    const html = await res.text();
+    if (!res.ok) throw new Error(html || `HTTP ${res.status}`);
+    const w = window.open("", "_blank");
+    if (!w) throw new Error("Popup bloquee: autorise les popups pour l'impression.");
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+    if (panel) panel.innerHTML = "<p>Mode imprimable A4 ouvert. Lance l'impression.</p>";
+  } catch (error) {
+    if (panel) panel.innerHTML = `<p>Erreur impression A4: ${error.message}</p>`;
+  }
+}
+
 async function sendCouponPackToTelegram() {
   const panel = document.getElementById("validation");
   if (!lastCouponData || !Array.isArray(lastCouponData.coupon) || lastCouponData.coupon.length === 0) {
@@ -475,6 +640,7 @@ async function sendCouponPackToTelegram() {
   if (panel) panel.innerHTML = "<p>Envoi groupe en cours (texte + image + PDF)...</p>";
 
   try {
+    await replaceStartedSelectionsBeforeTelegram();
     await maybeStartAlertAndReplace();
     const adapted = await enforceTicketShield("envoi groupe Telegram");
     const payload = {
@@ -534,6 +700,134 @@ async function loadLeagues() {
   }
 }
 
+function computeMatchStability(pick, details) {
+  const markets = Array.isArray(details?.bettingMarkets) ? details.bettingMarkets : [];
+  const selected = markets.find((m) => String(m.nom || "") === String(pick?.pari || ""));
+  const selectedOdd = toNumber(pick?.cote, 0);
+  const liveOdd = toNumber(selected?.cote, selectedOdd);
+  const driftPct = selectedOdd > 0 ? Math.abs(((liveOdd - selectedOdd) / selectedOdd) * 100) : 0;
+
+  const odds1x2 = details?.match?.odds1x2 || {};
+  const baseOdds = [toNumber(odds1x2.home, 0), toNumber(odds1x2.draw, 0), toNumber(odds1x2.away, 0)].filter((x) => x > 0);
+  const spread = baseOdds.length ? Math.max(...baseOdds) - Math.min(...baseOdds) : 0.8;
+
+  const nowSec = Math.floor(Date.now() / 1000);
+  const startSec = toNumber(pick?.startTimeUnix, 0);
+  const minutesToStart = startSec > nowSec ? Math.floor((startSec - nowSec) / 60) : 0;
+
+  const volatilityScore = clamp(100 - driftPct * 9 - spread * 10, 0, 100);
+  const timeScore = clamp(minutesToStart * 2.2, 0, 100);
+  const liquidityScore = clamp((markets.length / 120) * 100, 8, 100);
+  const stability = Math.round(volatilityScore * 0.45 + timeScore * 0.35 + liquidityScore * 0.2);
+
+  return {
+    stability,
+    driftPct: Number(driftPct.toFixed(2)),
+    marketCount: markets.length,
+    minutesToStart,
+  };
+}
+
+async function hydrateCouponStability(picks = []) {
+  if (!Array.isArray(picks) || !picks.length) return;
+  for (const pick of picks) {
+    const id = String(pick.matchId || "");
+    if (!id) continue;
+    const host = document.getElementById(`stability-${id}`);
+    try {
+      let data = stabilityCache.get(id);
+      if (!data) {
+        const res = await fetch(`/api/matches/${encodeURIComponent(id)}/details`, { cache: "no-store" });
+        const details = await readJsonSafe(res);
+        if (!res.ok || !details?.success) throw new Error("details indisponibles");
+        data = computeMatchStability(pick, details);
+        stabilityCache.set(id, data);
+      }
+      if (host) {
+        host.textContent = `Stabilite ${data.stability}/100 | Drift ${data.driftPct}% | Marches ${data.marketCount}`;
+      }
+      pick.stabilityScore = data.stability;
+    } catch {
+      if (host) host.textContent = "Stabilite: indisponible";
+    }
+  }
+}
+
+async function replaceStartedSelectionsBeforeTelegram() {
+  if (!lastCouponData?.coupon?.length) return;
+  const nowSec = Math.floor(Date.now() / 1000);
+  const started = lastCouponData.coupon.filter((x) => !isStrictUpcomingMatch(x, nowSec));
+  if (!started.length) return;
+
+  const needed = started.length;
+  const risk = lastCouponData.riskProfile || "balanced";
+  const league = document.getElementById("leagueSelect")?.value || "all";
+  let data;
+  try {
+    const res = await fetch(`/api/coupon?size=${needed + 2}&league=${encodeURIComponent(league)}&risk=${encodeURIComponent(risk)}`, {
+      cache: "no-store",
+    });
+    data = await readJsonSafe(res);
+    if (!res.ok || !data?.success) throw new Error("api indisponible");
+  } catch {
+    data = await generateCouponFallback(needed + 2, league, risk);
+  }
+  const fresh = (Array.isArray(data?.coupon) ? data.coupon : []).filter((x) => isStrictUpcomingMatch(x, nowSec));
+  const existingIds = new Set(lastCouponData.coupon.map((x) => String(x.matchId)));
+  const replacements = fresh.filter((x) => !existingIds.has(String(x.matchId))).slice(0, needed);
+  if (replacements.length < needed) {
+    throw new Error("Impossible de remplacer tous les matchs deja en live.");
+  }
+
+  let idx = 0;
+  const updated = lastCouponData.coupon.map((x) => {
+    if (isStrictUpcomingMatch(x, nowSec)) return x;
+    const next = replacements[idx];
+    idx += 1;
+    return next;
+  });
+  lastCouponData = {
+    ...lastCouponData,
+    coupon: updated,
+    summary: createCouponSummary(updated),
+    warning: `${needed} match(s) live remplace(s) automatiquement avant envoi Telegram.`,
+  };
+  renderCoupon(lastCouponData);
+}
+
+async function refreshLadderBeforeTelegram() {
+  if (!lastLadderData?.items?.length) return;
+  const nowSec = Math.floor(Date.now() / 1000);
+  const league = document.getElementById("leagueSelect")?.value || "all";
+  const items = [];
+  for (const item of lastLadderData.items) {
+    const coupon = Array.isArray(item?.coupon) ? item.coupon : [];
+    const hasStarted = coupon.some((x) => !isStrictUpcomingMatch(x, nowSec));
+    if (!hasStarted) {
+      items.push(item);
+      continue;
+    }
+    let data;
+    try {
+      const res = await fetch(
+        `/api/coupon?size=${Math.max(1, coupon.length)}&league=${encodeURIComponent(league)}&risk=${encodeURIComponent(item.profile || "balanced")}`,
+        { cache: "no-store" }
+      );
+      data = await readJsonSafe(res);
+      if (!res.ok || !data?.success) throw new Error("api indisponible");
+    } catch {
+      data = await generateCouponFallback(Math.max(1, coupon.length), league, item.profile || "balanced");
+    }
+    items.push({
+      ...item,
+      coupon: Array.isArray(data?.coupon) ? data.coupon : coupon,
+      summary: data?.summary || createCouponSummary(Array.isArray(data?.coupon) ? data.coupon : coupon),
+    });
+  }
+  lastLadderData = { ...lastLadderData, items };
+  renderLadderPanel(lastLadderData);
+}
+
 function renderCoupon(data) {
   lastCouponData = data;
   lastCouponBackups = new Map();
@@ -559,6 +853,7 @@ function renderCoupon(data) {
         <div class="confidence-track"><i style="width:${Math.max(4, Math.min(100, Number(p.confiance) || 0))}%"></i><em>${Number(
           p.confiance || 0
         ).toFixed(0)}%</em></div>
+        <span class="stability-badge" id="stability-${String(p.matchId)}">Stabilite: calcul...</span>
         <div class="coach-pick-line">${explainPickSimple(p, data.riskProfile || "balanced")}</div>
         <a href="/match.html?id=${encodeURIComponent(p.matchId)}">Voir detail match</a>
       </li>
@@ -600,6 +895,18 @@ function renderCoupon(data) {
     at: new Date().toISOString(),
     note: `${data.summary?.totalSelections ?? 0} selections | cote ${formatOdd(data.summary?.combinedOdd)} | profil ${data.riskProfile || "balanced"}`,
   });
+  hydrateCouponStability(picks).then(() => {
+    const values = picks.map((x) => Number(x.stabilityScore)).filter((x) => Number.isFinite(x));
+    if (!values.length) return;
+    const avg = Number((values.reduce((a, b) => a + b, 0) / values.length).toFixed(1));
+    const meta = document.querySelector("#result .meta");
+    if (!meta) return;
+    const exists = [...meta.querySelectorAll("span")].some((x) => String(x.textContent || "").includes("Stabilite moyenne"));
+    if (exists) return;
+    const span = document.createElement("span");
+    span.textContent = `Stabilite moyenne: ${avg}/100`;
+    meta.appendChild(span);
+  });
 }
 
 async function buildBackupPlan(coupon = [], profile = "balanced") {
@@ -630,9 +937,11 @@ async function renderMultiStrategy() {
   const panel = document.getElementById("multiResult");
   const league = document.getElementById("leagueSelect")?.value || "all";
   const size = Math.max(1, Math.min(Number(document.getElementById("sizeInput")?.value) || 3, 12));
+  const stake = getStakeValue();
   panel.innerHTML = "<h3>Coupon Multi-Strategie</h3><p>Generation en cours...</p>";
 
   const cards = [];
+  const ranking = [];
   for (const profile of MULTI_PROFILES) {
     try {
       let data;
@@ -647,6 +956,11 @@ async function renderMultiStrategy() {
       }
       const picks = Array.isArray(data.coupon) ? data.coupon : [];
       const insights = computeCouponInsights(picks, profile);
+      const odd = Number(data.summary?.combinedOdd || 1);
+      const p = clamp(Number(data.summary?.averageConfidence || 0) / 100, 0.03, 0.97);
+      const expectedNet = Number((stake * (odd * p - 1)).toFixed(2));
+      const riskIndex = clamp(Math.round((100 - insights.qualityScore) * 0.55 + insights.correlationRisk * 0.45), 1, 99);
+      ranking.push({ profile, expectedNet, riskIndex, quality: insights.qualityScore });
       cards.push(`
         <article class="risk-card">
           <h4>${profile.toUpperCase()}</h4>
@@ -654,6 +968,8 @@ async function renderMultiStrategy() {
           <div>Cote: ${formatOdd(data.summary?.combinedOdd)}</div>
           <div>Confiance: ${data.summary?.averageConfidence ?? 0}%</div>
           <div>Qualite: ${insights.qualityScore}/100</div>
+          <div>Gain attendu (net): ${expectedNet.toFixed(2)}</div>
+          <div>Indice risque: ${riskIndex}/100</div>
           <div>Deadline: ${insights.minStartMinutes == null ? "-" : formatMinutes(insights.minStartMinutes)}</div>
         </article>
       `);
@@ -662,8 +978,16 @@ async function renderMultiStrategy() {
     }
   }
 
+  ranking.sort((a, b) => b.quality - a.quality || b.expectedNet - a.expectedNet);
+  const top = ranking[0];
+
   panel.innerHTML = `
     <h3>Coupon Multi-Strategie</h3>
+    ${
+      top
+        ? `<p>Comparateur: meilleur compromis actuel <strong>${top.profile.toUpperCase()}</strong> (qualite ${top.quality}/100, risque ${top.riskIndex}/100).</p>`
+        : ""
+    }
     <div class="risk-grid">${cards.join("")}</div>
   `;
 }
@@ -790,6 +1114,7 @@ async function sendCouponToTelegram(sendImage = false) {
   if (panel) panel.innerHTML = `<p>Envoi Telegram ${sendImage ? "image" : "texte"} en cours...</p>`;
 
   try {
+    await replaceStartedSelectionsBeforeTelegram();
     await maybeStartAlertAndReplace();
     const adapted = await enforceTicketShield("envoi Telegram");
 
@@ -1266,6 +1591,8 @@ async function validateTicket() {
 
     const data = await fetchValidationReport(payload);
     renderValidation(data);
+    addPerformanceFromValidation(data);
+    renderPerformanceJournal();
   } catch (error) {
     panel.innerHTML = `<p>Erreur validation: ${error.message}</p>`;
   }
@@ -1340,6 +1667,8 @@ const sendTelegramBtn = document.getElementById("sendTelegramBtn");
 const sendLadderTelegramBtn = document.getElementById("sendLadderTelegramBtn");
 const sendPackBtn = document.getElementById("sendPackBtn");
 const sendTelegramImageBtn = document.getElementById("sendTelegramImageBtn");
+const printA4Btn = document.getElementById("printA4Btn");
+const analyzeJournalBtn = document.getElementById("analyzeJournalBtn");
 const downloadImageBtn = document.getElementById("downloadImageBtn");
 const downloadStoryBtn = document.getElementById("downloadStoryBtn");
 const downloadPdfQuickBtn = document.getElementById("downloadPdfQuickBtn");
@@ -1378,6 +1707,12 @@ if (sendPackBtn) {
 }
 if (sendTelegramImageBtn) {
   sendTelegramImageBtn.addEventListener("click", () => sendCouponToTelegram(true));
+}
+if (printA4Btn) {
+  printA4Btn.addEventListener("click", openPrintA4Mode);
+}
+if (analyzeJournalBtn) {
+  analyzeJournalBtn.addEventListener("click", renderPerformanceJournal);
 }
 if (downloadImageBtn) {
   downloadImageBtn.addEventListener("click", () => downloadCouponImage("default"));
@@ -1435,6 +1770,7 @@ async function initCouponPage() {
 
   await loadLeagues();
   renderHistory();
+  renderPerformanceJournal();
   updateSendButtonState();
 
   if (isAutoCouponEnabled()) {
@@ -1473,6 +1809,8 @@ function registerCouponSiteControl() {
       "send_ladder_telegram",
       "send_telegram_image",
       "send_telegram_pack",
+      "print_a4",
+      "analyze_journal",
       "download_image",
       "download_story",
       "download_pdf_quick",
@@ -1494,6 +1832,8 @@ function registerCouponSiteControl() {
       if (action === "send_ladder_telegram") return sendLadderToTelegram();
       if (action === "send_telegram_image") return sendCouponToTelegram(true);
       if (action === "send_telegram_pack") return sendCouponPackToTelegram();
+      if (action === "print_a4") return openPrintA4Mode();
+      if (action === "analyze_journal") return renderPerformanceJournal();
       if (action === "download_image") return downloadCouponImage("default");
       if (action === "download_story") return downloadCouponImage("story");
       if (action === "download_pdf_quick") return downloadCouponPdf("quick");

@@ -131,11 +131,13 @@ h1 {
 #sendLadderTelegramBtn,
 #sendPackBtn,
 #sendTelegramImageBtn,
+#printA4Btn,
 #downloadImageBtn,
 #downloadStoryBtn,
 #downloadPdfQuickBtn,
 #downloadPdfBtn,
-#downloadPdfDetailedBtn {
+#downloadPdfDetailedBtn,
+#analyzeJournalBtn {
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 10px;
   padding: 0.56rem 0.82rem;
@@ -196,6 +198,11 @@ h1 {
   background: linear-gradient(90deg, #8ad8ff, #c7edff);
 }
 
+#printA4Btn {
+  color: #051120;
+  background: linear-gradient(90deg, #b9ffd8, #e3ffef);
+}
+
 #downloadImageBtn {
   color: #051120;
   background: linear-gradient(90deg, #a8ffb7, #ddffd8);
@@ -221,6 +228,11 @@ h1 {
   background: linear-gradient(90deg, #b7ffef, #ddfff7);
 }
 
+#analyzeJournalBtn {
+  color: #051120;
+  background: linear-gradient(90deg, #f8df9a, #fff0c8);
+}
+
 #generateBtn:active,
 #generateLadderBtn:active,
 #generateMultiBtn:active,
@@ -230,11 +242,13 @@ h1 {
 #sendLadderTelegramBtn:active,
 #sendPackBtn:active,
 #sendTelegramImageBtn:active,
+#printA4Btn:active,
 #downloadImageBtn:active,
 #downloadStoryBtn:active,
 #downloadPdfQuickBtn:active,
 #downloadPdfBtn:active,
-#downloadPdfDetailedBtn:active { transform: translateY(1px); }
+#downloadPdfDetailedBtn:active,
+#analyzeJournalBtn:active { transform: translateY(1px); }
 
 #generateBtn::after,
 #generateLadderBtn::after,
@@ -245,11 +259,13 @@ h1 {
 #sendLadderTelegramBtn::after,
 #sendPackBtn::after,
 #sendTelegramImageBtn::after,
+#printA4Btn::after,
 #downloadImageBtn::after,
 #downloadStoryBtn::after,
 #downloadPdfQuickBtn::after,
 #downloadPdfBtn::after,
-#downloadPdfDetailedBtn::after {
+#downloadPdfDetailedBtn::after,
+#analyzeJournalBtn::after {
   content: "";
   position: absolute;
   top: -120%;
@@ -269,12 +285,14 @@ h1 {
 #sendPackBtn:disabled,
 #sendLadderTelegramBtn:disabled,
 #sendTelegramImageBtn:disabled,
+#printA4Btn:disabled,
 #downloadImageBtn:disabled,
 #downloadStoryBtn:disabled,
 #replaceWeakBtn:disabled,
 #simulateBankrollBtn:disabled,
 #downloadPdfQuickBtn:disabled,
-#downloadPdfBtn:disabled {
+#downloadPdfBtn:disabled,
+#analyzeJournalBtn:disabled {
   cursor: not-allowed;
   opacity: 0.55;
 }
@@ -402,6 +420,18 @@ li a {
   margin-top: 0.34rem;
   font-size: 0.8rem;
   color: #bee8ff;
+}
+
+.stability-badge {
+  margin-top: 0.3rem;
+  display: inline-block;
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border: 1px solid rgba(125, 255, 173, 0.36);
+  color: #c9ffe0;
+  background: rgba(125, 255, 173, 0.12);
 }
 
 .ticket-status {
