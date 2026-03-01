@@ -18,8 +18,13 @@ const PAGE_REFRESH_COUPON_STORAGE_KEY = "fc25_coupon_refresh_minutes_v1";
 const PERFORMANCE_LOG_KEY = "fc25_performance_log_v1";
 const ANTI_CORRELATION_KEY = "fc25_anti_correlation_v1";
 const FREEZE_MINUTES_KEY = "fc25_freeze_minutes_v1";
+const BANKROLL_PROFILE_KEY = "fc25_bankroll_profile_v1";
+const LIVE_SIMULATION_KEY = "fc25_live_simulation_v1";
+const WATCHLIST_KEY = "fc25_watchlist_v1";
 const DEFAULT_PAGE_REFRESH_MINUTES = 5;
 let pageRefreshCouponIntervalId = null;
+let liveSimulationIntervalId = null;
+let watchlistIntervalId = null;
 const stabilityCache = new Map();
 
 function clamp(n, min, max) {
@@ -363,6 +368,7 @@ function updateSendButtonState() {
   const ladderTgBtn = document.getElementById("sendLadderTelegramBtn");
   const imageTelegramBtn = document.getElementById("sendTelegramImageBtn");
   const printBtn = document.getElementById("printA4Btn");
+  const watchBtn = document.getElementById("watchlistFromCouponBtn");
   const stickyBtn = document.getElementById("sendTelegramBtnSticky");
   const stickyImageBtn = document.getElementById("sendTelegramImageBtnSticky");
   const replaceWeakBtn = document.getElementById("replaceWeakBtn");
@@ -381,6 +387,7 @@ function updateSendButtonState() {
   if (ladderTgBtn) ladderTgBtn.disabled = !(lastLadderData && Array.isArray(lastLadderData.items) && lastLadderData.items.length > 0);
   if (imageTelegramBtn) imageTelegramBtn.disabled = !enabled;
   if (printBtn) printBtn.disabled = !enabled;
+  if (watchBtn) watchBtn.disabled = !enabled;
   if (stickyBtn) stickyBtn.disabled = !enabled;
   if (stickyImageBtn) stickyImageBtn.disabled = !enabled;
   if (replaceWeakBtn) replaceWeakBtn.disabled = !enabled || frozen;
@@ -415,6 +422,48 @@ function isAntiCorrelationEnabled() {
 
 function setAntiCorrelationEnabled(value) {
   localStorage.setItem(ANTI_CORRELATION_KEY, value ? "1" : "0");
+}
+
+function getBankrollProfile() {
+  const v = String(localStorage.getItem(BANKROLL_PROFILE_KEY) || "standard").toLowerCase();
+  return ["conservateur", "standard", "attaque"].includes(v) ? v : "standard";
+}
+
+function setBankrollProfile(profile) {
+  const safe = ["conservateur", "standard", "attaque"].includes(String(profile || "").toLowerCase())
+    ? String(profile).toLowerCase()
+    : "standard";
+  localStorage.setItem(BANKROLL_PROFILE_KEY, safe);
+  return safe;
+}
+
+function isLiveSimulationEnabled() {
+  return localStorage.getItem(LIVE_SIMULATION_KEY) === "1";
+}
+
+function setLiveSimulationEnabled(value) {
+  localStorage.setItem(LIVE_SIMULATION_KEY, value ? "1" : "0");
+}
+
+function readWatchlist() {
+  try {
+    const raw = localStorage.getItem(WATCHLIST_KEY);
+    const parsed = JSON.parse(raw || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeWatchlist(items) {
+  localStorage.setItem(WATCHLIST_KEY, JSON.stringify((Array.isArray(items) ? items : []).slice(0, 120)));
+}
+
+function getWatchDelta() {
+  const input = document.getElementById("watchDeltaInput");
+  const n = Number(input?.value);
+  if (!Number.isFinite(n)) return 0.15;
+  return Math.max(0.01, Math.min(2, n));
 }
 
 function renderLadderPanel(data) {
@@ -682,6 +731,183 @@ function renderPerformanceReplay() {
     <ul class="validation-list">${toRows(dayMap) || "<li>Aucune donnee</li>"}</ul>
     <p><strong>Replay hebdo (8 dernieres semaines)</strong></p>
     <ul class="validation-list">${toRows(weekMap) || "<li>Aucune donnee</li>"}</ul>
+  `;
+}
+
+function renderWatchlistPanel() {
+  const panel = document.getElementById("watchlistPanel");
+  if (!panel) return;
+  const items = readWatchlist();
+  if (!items.length) {
+    panel.innerHTML = "<h3>Watchlist Cotes</h3><p>Aucune surveillance active.</p>";
+    return;
+  }
+  const rows = items
+    .slice(0, 10)
+    .map(
+      (x, i) =>
+        `<li><strong>${i + 1}. ${x.home} vs ${x.away}</strong> | Target: ${formatOdd(x.targetOdd)} | Actuelle: ${formatOdd(
+          x.currentOdd
+        )} | ${x.alerted ? "ALERTE ENVOYEE" : "EN ATTENTE"}</li>`
+    )
+    .join("");
+  panel.innerHTML = `
+    <h3>Watchlist Cotes</h3>
+    <p>Delta cible: +${getWatchDelta().toFixed(2)}</p>
+    <ul class="validation-list">${rows}</ul>
+  `;
+}
+
+function buildWatchlistFromCoupon() {
+  if (!lastCouponData?.coupon?.length) return;
+  const delta = getWatchDelta();
+  const list = lastCouponData.coupon.map((p) => ({
+    matchId: p.matchId,
+    home: p.teamHome,
+    away: p.teamAway,
+    league: p.league,
+    pari: p.pari,
+    baseOdd: Number(p.cote) || 0,
+    targetOdd: Number(((Number(p.cote) || 0) + delta).toFixed(3)),
+    currentOdd: Number(p.cote) || 0,
+    alerted: false,
+    updatedAt: new Date().toISOString(),
+  }));
+  writeWatchlist(list);
+  renderWatchlistPanel();
+}
+
+async function updateWatchlistLive() {
+  const list = readWatchlist();
+  if (!list.length) return;
+  let changed = false;
+  for (const item of list) {
+    try {
+      const res = await fetch(`/api/matches/${encodeURIComponent(item.matchId)}/details`, { cache: "no-store" });
+      const data = await readJsonSafe(res);
+      if (!res.ok || !data?.success) continue;
+      const markets = Array.isArray(data?.bettingMarkets) ? data.bettingMarkets : [];
+      const m = markets.find((x) => String(x.nom || "") === String(item.pari || ""));
+      const odd = Number(m?.cote);
+      if (!Number.isFinite(odd) || odd <= 0) continue;
+      item.currentOdd = odd;
+      item.updatedAt = new Date().toISOString();
+      if (!item.alerted && odd >= Number(item.targetOdd || 0)) {
+        item.alerted = true;
+        changed = true;
+        const panel = document.getElementById("validation");
+        if (panel) {
+          panel.innerHTML = `<p class="ticket-status ticket-ok">Watchlist: cote cible atteinte pour ${item.home} vs ${item.away} (${formatOdd(
+            odd
+          )}).</p>`;
+        }
+      }
+      changed = true;
+    } catch {
+      // ignore transient errors
+    }
+  }
+  if (changed) {
+    writeWatchlist(list);
+    renderWatchlistPanel();
+  }
+}
+
+async function refreshLiveSimulation() {
+  if (!isLiveSimulationEnabled() || !lastCouponData?.coupon?.length) return;
+  await hydrateCouponStability(lastCouponData.coupon);
+  const picks = lastCouponData.coupon;
+  const ev = computeCouponEV(picks);
+  const stabilityValues = picks.map((x) => Number(x.stabilityScore)).filter((x) => Number.isFinite(x));
+  const avgStability = stabilityValues.length
+    ? Number((stabilityValues.reduce((a, b) => a + b, 0) / stabilityValues.length).toFixed(1))
+    : null;
+  const panel = document.getElementById("validation");
+  if (panel) {
+    panel.innerHTML = `<p>Simulation live: EV ${ev >= 0 ? "+" : ""}${ev.toFixed(3)} | Stabilite moyenne ${
+      avgStability == null ? "-" : `${avgStability}/100`
+    } | ${formatDateTime(new Date())}</p>`;
+  }
+}
+
+function restartLiveMonitors() {
+  if (liveSimulationIntervalId) {
+    clearInterval(liveSimulationIntervalId);
+    liveSimulationIntervalId = null;
+  }
+  if (watchlistIntervalId) {
+    clearInterval(watchlistIntervalId);
+    watchlistIntervalId = null;
+  }
+
+  if (isLiveSimulationEnabled()) {
+    liveSimulationIntervalId = setInterval(() => {
+      refreshLiveSimulation();
+    }, 30000);
+    watchlistIntervalId = setInterval(() => {
+      updateWatchlistLive();
+    }, 30000);
+  }
+}
+
+function applyBankrollProfilePreset(profile) {
+  const safe = setBankrollProfile(profile);
+  const sizeInput = document.getElementById("sizeInput");
+  const driftInput = document.getElementById("driftInput");
+  const freezeInput = document.getElementById("freezeMinutesInput");
+  const riskSelect = document.getElementById("riskSelect");
+  if (safe === "conservateur") {
+    if (sizeInput) sizeInput.value = "2";
+    if (driftInput) driftInput.value = "5";
+    if (freezeInput) freezeInput.value = "6";
+    if (riskSelect) riskSelect.value = "safe";
+  } else if (safe === "attaque") {
+    if (sizeInput) sizeInput.value = "5";
+    if (driftInput) driftInput.value = "9";
+    if (freezeInput) freezeInput.value = "1";
+    if (riskSelect) riskSelect.value = "aggressive";
+  } else {
+    if (sizeInput) sizeInput.value = "3";
+    if (driftInput) driftInput.value = "6";
+    if (freezeInput) freezeInput.value = "3";
+    if (riskSelect) riskSelect.value = "balanced";
+  }
+  setFreezeMinutes(freezeInput?.value || 3);
+  updateSendButtonState();
+}
+
+function renderPostTicketReport(report) {
+  const panel = document.getElementById("postTicketPanel");
+  if (!panel) return;
+  const rows = Array.isArray(report?.validatedSelections) ? report.validatedSelections : [];
+  if (!rows.length) {
+    panel.innerHTML = "<h3>Rapport Post-Ticket</h3><p>Aucune donnee.</p>";
+    return;
+  }
+  const reasonCount = new Map();
+  for (const row of rows) {
+    for (const r of row.reasonCodes || []) {
+      reasonCount.set(r, (reasonCount.get(r) || 0) + 1);
+    }
+  }
+  const reasons = [...reasonCount.entries()].sort((a, b) => b[1] - a[1]);
+  const best = rows.filter((x) => x.status === "ok").length;
+  const total = rows.length;
+  panel.innerHTML = `
+    <h3>Rapport Post-Ticket</h3>
+    <div class="meta">
+      <span>Lignes: ${total}</span>
+      <span>Propres: ${best}</span>
+      <span>A corriger: ${total - best}</span>
+    </div>
+    <p><strong>Causes dominantes</strong></p>
+    <ul class="validation-list">
+      ${
+        reasons.length
+          ? reasons.map((x) => `<li>${x[0]}: ${x[1]}</li>`).join("")
+          : "<li>Aucune cause critique</li>"
+      }
+    </ul>
   `;
 }
 
@@ -1740,6 +1966,7 @@ async function validateTicket() {
     renderValidation(data);
     addPerformanceFromValidation(data);
     renderPerformanceJournal();
+    renderPostTicketReport(data);
   } catch (error) {
     panel.innerHTML = `<p>Erreur validation: ${error.message}</p>`;
   }
@@ -1822,6 +2049,7 @@ const sendTelegramImageBtn = document.getElementById("sendTelegramImageBtn");
 const printA4Btn = document.getElementById("printA4Btn");
 const analyzeJournalBtn = document.getElementById("analyzeJournalBtn");
 const replayJournalBtn = document.getElementById("replayJournalBtn");
+const watchlistFromCouponBtn = document.getElementById("watchlistFromCouponBtn");
 const downloadImageBtn = document.getElementById("downloadImageBtn");
 const downloadStoryBtn = document.getElementById("downloadStoryBtn");
 const downloadPdfQuickBtn = document.getElementById("downloadPdfQuickBtn");
@@ -1872,6 +2100,9 @@ if (analyzeJournalBtn) {
 }
 if (replayJournalBtn) {
   replayJournalBtn.addEventListener("click", renderPerformanceReplay);
+}
+if (watchlistFromCouponBtn) {
+  watchlistFromCouponBtn.addEventListener("click", buildWatchlistFromCoupon);
 }
 if (downloadImageBtn) {
   downloadImageBtn.addEventListener("click", () => downloadCouponImage("default"));
@@ -1927,6 +2158,14 @@ async function initCouponPage() {
     });
   }
 
+  const bankrollProfileSelect = document.getElementById("bankrollProfileSelect");
+  if (bankrollProfileSelect) {
+    bankrollProfileSelect.value = getBankrollProfile();
+    bankrollProfileSelect.addEventListener("change", () => {
+      applyBankrollProfilePreset(bankrollProfileSelect.value);
+    });
+  }
+
   const antiSwitch = document.getElementById("antiCorrelationSwitch");
   if (antiSwitch) {
     antiSwitch.checked = isAntiCorrelationEnabled();
@@ -1958,10 +2197,21 @@ async function initCouponPage() {
     });
   }
 
+  const liveSimSwitch = document.getElementById("liveSimSwitch");
+  if (liveSimSwitch) {
+    liveSimSwitch.checked = isLiveSimulationEnabled();
+    liveSimSwitch.addEventListener("change", () => {
+      setLiveSimulationEnabled(liveSimSwitch.checked);
+      restartLiveMonitors();
+    });
+  }
+
   await loadLeagues();
   renderHistory();
   renderPerformanceJournal();
+  renderWatchlistPanel();
   updateSendButtonState();
+  restartLiveMonitors();
 
   if (isAutoCouponEnabled()) {
     setTimeout(() => {
@@ -2013,6 +2263,9 @@ function registerCouponSiteControl() {
       "set_refresh_minutes",
       "set_anti_correlation",
       "set_freeze_minutes",
+      "set_bankroll_profile",
+      "set_live_simulation",
+      "build_watchlist",
     ],
     async execute(name, payload = {}) {
       const action = String(name || "").toLowerCase();
@@ -2030,6 +2283,7 @@ function registerCouponSiteControl() {
       if (action === "print_a4") return openPrintA4Mode();
       if (action === "analyze_journal") return renderPerformanceJournal();
       if (action === "replay_journal") return renderPerformanceReplay();
+      if (action === "build_watchlist") return buildWatchlistFromCoupon();
       if (action === "download_image") return downloadCouponImage("default");
       if (action === "download_story") return downloadCouponImage("story");
       if (action === "download_pdf_quick") return downloadCouponPdf("quick");
@@ -2061,6 +2315,21 @@ function registerCouponSiteControl() {
         const input = document.getElementById("freezeMinutesInput");
         if (input) input.value = String(m);
         updateSendButtonState();
+        return true;
+      }
+      if (action === "set_bankroll_profile") {
+        const p = setBankrollProfile(payload?.profile);
+        const input = document.getElementById("bankrollProfileSelect");
+        if (input) input.value = p;
+        applyBankrollProfilePreset(p);
+        return true;
+      }
+      if (action === "set_live_simulation") {
+        const enabled = payload?.enabled !== false;
+        setLiveSimulationEnabled(enabled);
+        const sw = document.getElementById("liveSimSwitch");
+        if (sw) sw.checked = enabled;
+        restartLiveMonitors();
         return true;
       }
       if (action === "set_coupon_form") {

@@ -77,9 +77,25 @@
           <span>Freeze ticket (min)</span>
           <input id="freezeMinutesInput" type="number" min="0" max="30" step="1" value="3" />
         </label>
+        <label>
+          <span>Profil bankroll</span>
+          <select id="bankrollProfileSelect">
+            <option value="conservateur">Conservateur</option>
+            <option value="standard" selected>Standard</option>
+            <option value="attaque">Attaque</option>
+          </select>
+        </label>
         <label class="switch-line">
           <span>Anti-correlation auto</span>
           <input id="antiCorrelationSwitch" type="checkbox" checked />
+        </label>
+        <label class="switch-line">
+          <span>Simulation live 30s</span>
+          <input id="liveSimSwitch" type="checkbox" />
+        </label>
+        <label>
+          <span>Watchlist delta cote</span>
+          <input id="watchDeltaInput" type="number" min="0.01" max="2" step="0.01" value="0.15" />
         </label>
         <div class="actions">
           <button id="generateBtn" type="button">Generer Coupon</button>
@@ -101,6 +117,7 @@
           <button id="downloadPdfDetailedBtn" type="button" disabled>PDF Detaille</button>
           <button id="analyzeJournalBtn" type="button">Analyser Journal</button>
           <button id="replayJournalBtn" type="button">Replay Journal</button>
+          <button id="watchlistFromCouponBtn" type="button" disabled>Watchlist depuis coupon</button>
         </div>
       </section>
 
@@ -129,6 +146,14 @@
       <section class="panel" id="performancePanel">
         <h3>Journal Performance</h3>
         <p>Aucune donnee pour le moment.</p>
+      </section>
+      <section class="panel" id="watchlistPanel">
+        <h3>Watchlist Cotes</h3>
+        <p>Aucune surveillance active.</p>
+      </section>
+      <section class="panel" id="postTicketPanel">
+        <h3>Rapport Post-Ticket</h3>
+        <p>Valide un ticket pour generer le rapport.</p>
       </section>
       <footer class="site-signature">Signe par <strong>SOLITAIRE HACK</strong></footer>
     </main>

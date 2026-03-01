@@ -384,6 +384,21 @@ function deriveControlActions(message, context = {}) {
     if (text.includes("replay journal") || text.includes("journal replay")) {
       actions.push({ type: "site_control", name: "replay_journal" });
     }
+    if (text.includes("watchlist")) {
+      actions.push({ type: "site_control", name: "build_watchlist" });
+    }
+    if (text.includes("profil bankroll conservateur")) {
+      actions.push({ type: "site_control", name: "set_bankroll_profile", payload: { profile: "conservateur" } });
+    } else if (text.includes("profil bankroll attaque")) {
+      actions.push({ type: "site_control", name: "set_bankroll_profile", payload: { profile: "attaque" } });
+    } else if (text.includes("profil bankroll standard")) {
+      actions.push({ type: "site_control", name: "set_bankroll_profile", payload: { profile: "standard" } });
+    }
+    if (text.includes("simulation live on")) {
+      actions.push({ type: "site_control", name: "set_live_simulation", payload: { enabled: true } });
+    } else if (text.includes("simulation live off")) {
+      actions.push({ type: "site_control", name: "set_live_simulation", payload: { enabled: false } });
+    }
     if (text.includes("image coupon")) actions.push({ type: "site_control", name: "download_image" });
     if (text.includes("story")) actions.push({ type: "site_control", name: "download_story" });
   }

@@ -139,7 +139,8 @@ h1 {
 #downloadPdfBtn,
 #downloadPdfDetailedBtn,
 #analyzeJournalBtn,
-#replayJournalBtn {
+#replayJournalBtn,
+#watchlistFromCouponBtn {
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 10px;
   padding: 0.56rem 0.82rem;
@@ -245,6 +246,11 @@ h1 {
   background: linear-gradient(90deg, #f3d9ff, #fbeeff);
 }
 
+#watchlistFromCouponBtn {
+  color: #051120;
+  background: linear-gradient(90deg, #d8f8ff, #eafcff);
+}
+
 #generateBtn:active,
 #generateLadderBtn:active,
 #generateMultiBtn:active,
@@ -262,7 +268,8 @@ h1 {
 #downloadPdfBtn:active,
 #downloadPdfDetailedBtn:active,
 #analyzeJournalBtn:active,
-#replayJournalBtn:active { transform: translateY(1px); }
+#replayJournalBtn:active,
+#watchlistFromCouponBtn:active { transform: translateY(1px); }
 
 #generateBtn::after,
 #generateLadderBtn::after,
@@ -281,7 +288,8 @@ h1 {
 #downloadPdfBtn::after,
 #downloadPdfDetailedBtn::after,
 #analyzeJournalBtn::after,
-#replayJournalBtn::after {
+#replayJournalBtn::after,
+#watchlistFromCouponBtn::after {
   content: "";
   position: absolute;
   top: -120%;
@@ -310,7 +318,8 @@ h1 {
 #downloadPdfQuickBtn:disabled,
 #downloadPdfBtn:disabled,
 #analyzeJournalBtn:disabled,
-#replayJournalBtn:disabled {
+#replayJournalBtn:disabled,
+#watchlistFromCouponBtn:disabled {
   cursor: not-allowed;
   opacity: 0.55;
 }
