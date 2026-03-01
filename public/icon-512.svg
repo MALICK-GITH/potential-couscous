@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="FC25">
+  <defs>
+    <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#20e3ff"/>
+      <stop offset="100%" stop-color="#84ffbe"/>
+    </linearGradient>
+    <linearGradient id="g2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#081428"/>
+      <stop offset="100%" stop-color="#13315d"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="512" height="512" rx="96" fill="url(#g2)"/>
+  <rect x="22" y="22" width="468" height="468" rx="82" fill="none" stroke="url(#g1)" stroke-width="8"/>
+  <text x="256" y="226" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="120" font-weight="800" fill="url(#g1)">FC</text>
+  <text x="256" y="354" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="132" font-weight="800" fill="#e8f3ff">25</text>
+</svg>
