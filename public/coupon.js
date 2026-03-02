@@ -185,6 +185,15 @@ function pushAlert({ severity = "low", title = "Info", detail = "", type = "info
   }
 }
 
+function notifyEvent(title, detail = "") {
+  pushAlert({ severity: "low", title, detail, type: "event_notify" });
+  if ("Notification" in window && Notification.permission === "granted") {
+    try {
+      new Notification(title, { body: detail || "Action terminee" });
+    } catch {}
+  }
+}
+
 function renderAlertsPanel() {
   const panel = document.getElementById("alertsPanel");
   if (!panel) return;
@@ -822,8 +831,11 @@ async function sendLadderToTelegram() {
       at: new Date().toISOString(),
       note: `Ladder Telegram envoye (${lastLadderData.items.length} tickets)`,
     });
+    notifyEvent("Coupon envoye", `Ladder Telegram envoye (${lastLadderData.items.length} tickets).`);
+    renderServerHistoryPanel();
   } catch (error) {
     if (panel) panel.innerHTML = `<p>Erreur Ladder Telegram: ${error.message}</p>`;
+    pushAlert({ severity: "high", title: "Erreur Ladder Telegram", detail: error.message, type: "telegram_ladder_error" });
   }
 }
 
@@ -1375,6 +1387,7 @@ async function sendCouponPackToTelegram() {
       detail: `${lastCouponData.summary?.totalSelections ?? 0} selections envoyees`,
       type: "telegram_pack_sent",
     });
+    notifyEvent("Coupon envoye", "Pack Telegram (texte + image + PDF) envoye.");
     renderServerHistoryPanel();
   } catch (error) {
     if (panel) panel.innerHTML = `<p>Erreur pack Telegram: ${error.message}</p>`;
@@ -1955,6 +1968,7 @@ async function sendCouponToTelegram(sendImage = false, mini = false) {
       detail: `Mode ${mini ? "mini" : sendImage ? "image" : "texte"} | ${lastCouponData.summary?.totalSelections ?? 0} selections`,
       type: "telegram_sent",
     });
+    notifyEvent("Coupon envoye", `Telegram ${mini ? "mini" : sendImage ? "image" : "texte"} reussi.`);
     renderServerHistoryPanel();
   } catch (error) {
     if (panel) panel.innerHTML = `<p>Erreur Telegram: ${error.message}</p>`;
@@ -2033,8 +2047,10 @@ async function downloadCouponPdf(mode = "summary") {
       at: new Date().toISOString(),
       note: `Export PDF ${label} | ${lastCouponData.summary?.totalSelections ?? 0} selections`,
     });
+    notifyEvent("Coupon envoye", `PDF ${label} telecharge.`);
   } catch (error) {
     if (panel) panel.innerHTML = `<p>Erreur PDF: ${error.message}</p>`;
+    pushAlert({ severity: "high", title: "Erreur PDF", detail: error.message, type: "pdf_error" });
   }
 }
 
@@ -2050,8 +2066,10 @@ async function downloadCouponPdfPack() {
       downloadCouponPdf("detailed");
     }, 550);
     if (panel) panel.innerHTML = "<p>Pack Multi-PDF lance: resume + detaille.</p>";
+    notifyEvent("Coupon envoye", "Pack PDF (resume + detaille) lance.");
   } catch (error) {
     if (panel) panel.innerHTML = `<p>Erreur PDF pack: ${error.message}</p>`;
+    pushAlert({ severity: "high", title: "Erreur PDF pack", detail: error.message, type: "pdf_pack_error" });
   }
 }
 
@@ -2111,9 +2129,11 @@ async function downloadCouponImage(mode = "default") {
       at: new Date().toISOString(),
       note: `Export ${mode === "story" ? "snap story" : "image coupon"} | ${lastCouponData.summary?.totalSelections ?? 0} selections`,
     });
+    notifyEvent("Coupon envoye", `${mode === "story" ? "Snap story" : "Image coupon"} telecharge${mode === "story" ? "" : "e"}.`);
     setTimeout(() => URL.revokeObjectURL(url), 30000);
   } catch (error) {
     if (panel) panel.innerHTML = `<p>Erreur image: ${error.message}</p>`;
+    pushAlert({ severity: "high", title: "Erreur image coupon", detail: error.message, type: "image_error" });
   }
 }
 

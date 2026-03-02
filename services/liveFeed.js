@@ -130,8 +130,8 @@ function translateBetOption(g, t, line, event) {
   }
 
   if (g === 19) {
-    if (t === 180) return "Les deux equipes marquent - Oui";
-    if (t === 181) return "Les deux equipes marquent - Non";
+    if (t === 180) return "Total Pair/Impair - Pair";
+    if (t === 181) return "Total Pair/Impair - Impair";
   }
 
   return `Marche ${g}/${t}${p ? ` (${p})` : ""}`;

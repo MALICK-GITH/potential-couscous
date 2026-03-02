@@ -40,6 +40,7 @@ function analyserPariUnifie(pari, team1, team2, _league, score1, score2, minute)
   let confiance = 50;
   const nom = normalizeText(pari.nom);
   const cote = parseNumber(pari.cote, 2);
+  const total = score1 + score2;
 
   if (isOffensiveTeam(team1)) confiance += 8;
   if (isOffensiveTeam(team2)) confiance += 8;
@@ -48,6 +49,11 @@ function analyserPariUnifie(pari, team1, team2, _league, score1, score2, minute)
     if (score1 + score2 >= 2 && minute < 60) confiance += 15;
   } else if (nom.includes("moins") && nom.includes("total")) {
     if (score1 + score2 <= 1 && minute > 60) confiance += 15;
+  } else if (nom.includes("pair") || nom.includes("impair")) {
+    const wantsPair = nom.includes("pair") && !nom.includes("impair");
+    const isPair = total % 2 === 0;
+    confiance += wantsPair === isPair ? 16 : -6;
+    if (minute >= 70) confiance += 6;
   }
 
   if (cote >= 1.8 && cote <= 2.5) confiance += 10;
@@ -68,6 +74,14 @@ function analyserPariIA(pari, team1, team2, _league, score1, score2, minute) {
     }
   }
 
+  if (nom.includes("pair") || nom.includes("impair")) {
+    const wantsPair = nom.includes("pair") && !nom.includes("impair");
+    const isPair = total % 2 === 0;
+    if (minute <= 20) confiance += 5;
+    if (minute >= 70) confiance += 8;
+    confiance += wantsPair === isPair ? 10 : -8;
+  }
+
   if ((normalizeText(team1).includes("arsenal") || normalizeText(team2).includes("arsenal")) && nom.includes("plus")) {
     confiance += 12;
   }
@@ -80,6 +94,7 @@ function analyserPariProbabilites(pari, score1, score2, _minute) {
   const cote = parseNumber(pari.cote, 2);
   const probImplicite = (1 / Math.max(cote, 0.01)) * 100;
   let probEstimee = 50;
+  const total = score1 + score2;
 
   if (nom.includes("total")) {
     if (nom.includes("plus")) {
@@ -89,6 +104,12 @@ function analyserPariProbabilites(pari, score1, score2, _minute) {
     } else {
       probEstimee = 55;
     }
+  }
+
+  if (nom.includes("pair") || nom.includes("impair")) {
+    const wantsPair = nom.includes("pair") && !nom.includes("impair");
+    const isPair = total % 2 === 0;
+    probEstimee = wantsPair === isPair ? 62 : 38;
   }
 
   if (probEstimee > probImplicite) {
@@ -104,6 +125,7 @@ function calculerValue(pari) {
 
   if (nom.includes("total")) probEstimee = nom.includes("moins") ? 65 : 45;
   else if (nom.includes("handicap")) probEstimee = 55;
+  else if (nom.includes("pair") || nom.includes("impair")) probEstimee = 54;
 
   const probImplicite = (1 / Math.max(cote, 0.01)) * 100;
   return Math.max(((probEstimee - probImplicite) / probImplicite) * 100, -50);
@@ -120,6 +142,13 @@ function analyserPariStat(pari, team1, team2, _league, score1, score2, minute) {
     } else if (minute > 70 && nom.includes("moins") && total <= 2) {
       confiance += 15;
     }
+  }
+
+  if (nom.includes("pair") || nom.includes("impair")) {
+    const wantsPair = nom.includes("pair") && !nom.includes("impair");
+    const isPair = total % 2 === 0;
+    confiance += wantsPair === isPair ? 9 : -6;
+    if (minute > 60) confiance += 5;
   }
 
   const hash = Array.from(`${team1}${team2}`).reduce((acc, ch) => acc + ch.charCodeAt(0), 0) % 100;

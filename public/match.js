@@ -82,6 +82,16 @@ function setMatchTelegramButtonEnabled(enabled) {
   if (exportBtn) exportBtn.disabled = !enabled;
 }
 
+function notifyAction(title, detail = "") {
+  const sub = document.getElementById("sub");
+  if (sub) sub.textContent = detail || title;
+  if ("Notification" in window && Notification.permission === "granted") {
+    try {
+      new Notification(title, { body: detail || "Action terminee" });
+    } catch {}
+  }
+}
+
 function startAutoRefresh() {
   if (!refreshIntervalId) {
     refreshIntervalId = setInterval(() => {
@@ -341,7 +351,7 @@ async function sendCurrentMatchToTelegram() {
     if (!res.ok || !data?.success) {
       throw new Error(data?.error || data?.message || "Erreur Telegram");
     }
-    document.getElementById("sub").textContent = "Ticket 1 match envoye sur Telegram.";
+    notifyAction("Coupon envoye", "Ticket 1 match envoye sur Telegram.");
   } catch (error) {
     document.getElementById("sub").textContent = `Erreur Telegram: ${error.message}`;
   } finally {
@@ -381,7 +391,7 @@ async function sendCurrentMatchImageToTelegram() {
     });
     const data = await res.json();
     if (!res.ok || !data?.success) throw new Error(data?.error || data?.message || "Erreur Telegram image");
-    document.getElementById("sub").textContent = "Image du ticket match envoyee sur Telegram.";
+    notifyAction("Coupon envoye", "Image du ticket match envoyee sur Telegram.");
   } catch (error) {
     document.getElementById("sub").textContent = `Erreur Telegram image: ${error.message}`;
   } finally {
@@ -427,7 +437,7 @@ async function exportMatchAllInOne() {
     }
     await downloadCurrentMatchImage();
     await downloadCurrentMatchPdf();
-    document.getElementById("sub").textContent = "Export 1-clic termine: Telegram + Image + PDF.";
+    notifyAction("Coupon envoye", "Export 1-clic termine: Telegram + Image + PDF.");
   } catch (error) {
     document.getElementById("sub").textContent = `Erreur export 1-clic: ${error.message}`;
   } finally {
@@ -481,7 +491,7 @@ async function downloadCurrentMatchPdf() {
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
-    document.getElementById("sub").textContent = "PDF match telecharge.";
+    notifyAction("Coupon envoye", "PDF match telecharge.");
   } catch (error) {
     document.getElementById("sub").textContent = `Erreur PDF: ${error.message}`;
   }
@@ -527,7 +537,7 @@ async function downloadCurrentMatchImage() {
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
-    document.getElementById("sub").textContent = "Image match telechargee.";
+    notifyAction("Coupon envoye", "Image match telechargee.");
   } catch (error) {
     document.getElementById("sub").textContent = `Erreur image: ${error.message}`;
   }
@@ -832,6 +842,11 @@ function init() {
     });
   }
   setMatchTelegramButtonEnabled(false);
+  if ("Notification" in window && Notification.permission === "default") {
+    try {
+      Notification.requestPermission();
+    } catch {}
+  }
   const sendBtn = document.getElementById("sendMatchTelegramBtn");
   if (sendBtn) sendBtn.addEventListener("click", sendCurrentMatchToTelegram);
   const sendImageBtn = document.getElementById("sendMatchTelegramImageBtn");
