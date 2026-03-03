@@ -148,6 +148,17 @@
     }
   }
 
+  function toChatHistoryPayload(history) {
+    if (!Array.isArray(history)) return [];
+    return history
+      .slice(-12)
+      .map((m) => ({
+        role: m?.role === "user" ? "user" : "assistant",
+        text: compactText(m?.text || "", 600),
+      }))
+      .filter((m) => m.text);
+  }
+
   function createUI() {
     const fab = document.createElement("button");
     fab.className = "chat-fab";
@@ -156,7 +167,7 @@
     fab.setAttribute("aria-label", "Ouvrir le chat AI");
 
     const panel = document.createElement("section");
-    panel.className = "chat-panel";
+    panel.className = "chat-panel chat-hidden";
     panel.innerHTML = `
       <div class="chat-head">
         <span>SOLITAIRE AI</span>
@@ -263,6 +274,7 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             message: text,
+            history: toChatHistoryPayload(history),
             context: getContext(),
           }),
           signal: controller.signal,

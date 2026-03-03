@@ -2193,6 +2193,14 @@ app.post("/api/chat", async (req, res) => {
       });
     }
     const message = trimText(req.body?.message, 2000);
+    const historyInput = Array.isArray(req.body?.history) ? req.body.history : [];
+    const chatHistory = historyInput
+      .slice(-12)
+      .map((m) => ({
+        role: String(m?.role || "").toLowerCase() === "user" ? "user" : "assistant",
+        text: trimText(m?.text || "", 600),
+      }))
+      .filter((m) => m.text);
     const page = trimText(req.body?.context?.page || "site", 80);
     const matchId = trimText(req.body?.context?.matchId || "", 60);
     const league = trimText(req.body?.context?.league || "", 120);
@@ -2223,6 +2231,11 @@ app.post("/api/chat", async (req, res) => {
 
     const userPrompt = [
       "Mode: assistant operationnel site uniquement. Priorite execution et reponse precise.",
+      chatHistory.length
+        ? `Historique conversation recente:\n${chatHistory
+            .map((m) => `${m.role === "user" ? "Utilisateur" : "Assistant"}: ${m.text}`)
+            .join("\n")}`
+        : "",
       `Contexte runtime:\n${runtimeContext}`,
       `Contexte page: ${page}`,
       matchId ? `Match ID: ${matchId}` : "",
