@@ -4,6 +4,42 @@
   const GLOBAL_REFRESH_KEY_MATCH = "fc25_page_refresh_minutes_v1";
   const GLOBAL_REFRESH_KEY_COUPON = "fc25_coupon_refresh_minutes_v1";
   const GLOBAL_REFRESH_DEFAULT_MIN = 5;
+  const sensitiveSiteActions = new Set([
+    "generate_coupon",
+    "generate_ladder",
+    "generate_multi",
+    "validate_ticket",
+    "replace_weak_pick",
+    "send_telegram_text",
+    "send_telegram_mini",
+    "send_ladder_telegram",
+    "send_telegram_image",
+    "send_telegram_pack",
+    "export_pro_report",
+    "export_match_all",
+  ]);
+
+  function isSensitiveAction(action) {
+    const type = String(action?.type || "");
+    if (type === "open_page" || type === "refresh_page" || type === "set_coupon_form") return false;
+    if (type === "site_control" || type === "run_site_action") {
+      const name = String(action?.name || action?.action || "").toLowerCase();
+      return sensitiveSiteActions.has(name);
+    }
+    return false;
+  }
+
+  function describeAction(action) {
+    const type = String(action?.type || "");
+    if (type === "open_page") return `Ouvrir page ${String(action?.target || "")}`;
+    if (type === "refresh_page") return "Actualiser la page";
+    if (type === "set_coupon_form") return "Configurer le formulaire coupon";
+    if (type === "site_control" || type === "run_site_action") {
+      const name = String(action?.name || action?.action || "").toLowerCase();
+      return `Action site: ${name}`;
+    }
+    return "Action IA";
+  }
 
   function getGlobalRefreshMinutes() {
     const fromMatch = Number(localStorage.getItem(GLOBAL_REFRESH_KEY_MATCH));
@@ -156,7 +192,7 @@
     fab.setAttribute("aria-label", "Ouvrir le chat AI");
 
     const panel = document.createElement("section");
-    panel.className = "chat-panel chat-hidden";
+    panel.className = "chat-panel";
     panel.innerHTML = `
       <div class="chat-head">
         <span>SOLITAIRE AI</span>
@@ -204,7 +240,7 @@
     }
 
     fab.addEventListener("click", () => {
-      panel.classList.toggle("chat-hidden");
+      panel.classList.remove("chat-hidden");
     });
 
     closeBtn.addEventListener("click", () => panel.classList.add("chat-hidden"));
@@ -216,6 +252,14 @@
 
     async function applyAction(action) {
       if (!action || typeof action !== "object") return;
+      if (isSensitiveAction(action)) {
+        push("ai", `Confirmation requise: ${describeAction(action)}. J'attends ton accord.`);
+        const ok = window.confirm(`Confirmer cette action IA ?\n\n${describeAction(action)}`);
+        if (!ok) {
+          push("ai", "Action annulee.");
+          return;
+        }
+      }
       const type = String(action.type || "");
       if (type === "open_page" && action.target) {
         window.location.href = String(action.target);
@@ -327,6 +371,10 @@
     for (const a of actions) {
       const type = String(a?.type || "");
       if (type === "site_control" || type === "run_site_action") {
+        if (isSensitiveAction(a)) {
+          const ok = window.confirm(`Action en attente depuis IA:\n${describeAction(a)}\n\nConfirmer ?`);
+          if (!ok) continue;
+        }
         try {
           await ctrl.execute(a.name || a.action || "", a.payload || {});
         } catch {}
