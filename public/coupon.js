@@ -72,7 +72,12 @@ function normalizeText(v) {
 function getDriftThreshold() {
   const input = document.getElementById("driftInput");
   const n = Number(input?.value);
-  if (!Number.isFinite(n)) return DEFAULT_TICKET_SHIELD_DRIFT;
+  if (!Number.isFinite(n)) {
+    const risk = normalizeRiskProfile(document.getElementById("riskSelect")?.value || "balanced");
+    return risk === "ultra_safe" ? 4 : DEFAULT_TICKET_SHIELD_DRIFT;
+  }
+  const risk = normalizeRiskProfile(document.getElementById("riskSelect")?.value || "balanced");
+  if (risk === "ultra_safe") return Math.max(2, Math.min(4, n));
   return Math.max(2, Math.min(25, n));
 }
 
@@ -396,9 +401,20 @@ async function readJsonSafe(response) {
 
 function riskConfig(profile = "balanced") {
   const key = normalizeText(profile);
+  if (key === "ultra_safe" || key === "ultrasafe") {
+    return { minOdd: 1.3, maxOdd: 1.95, minConfidence: 72, slope: 10, anchor: 1.55 };
+  }
   if (key === "safe") return { minOdd: 1.2, maxOdd: 1.7, minConfidence: 62, slope: 8, anchor: 1.45 };
   if (key === "aggressive") return { minOdd: 1.55, maxOdd: 3.2, minConfidence: 45, slope: 6, anchor: 2.2 };
   return { minOdd: 1.3, maxOdd: 2.25, minConfidence: 50, slope: 11, anchor: 1.7 };
+}
+
+function normalizeRiskProfile(profile = "balanced") {
+  const key = normalizeText(profile);
+  if (key === "ultra_safe" || key === "ultrasafe") return "ultra_safe";
+  if (key === "safe") return "safe";
+  if (key === "aggressive") return "aggressive";
+  return "balanced";
 }
 
 function formatMinutes(mins) {
@@ -413,6 +429,7 @@ function computeCouponInsights(coupon = [], riskProfile = "balanced") {
   if (!Array.isArray(coupon) || !coupon.length) {
     return {
       qualityScore: 0,
+      reliabilityIndex: 0,
       correlationRisk: 100,
       minStartMinutes: null,
       confidenceAvg: 0,
@@ -445,9 +462,19 @@ function computeCouponInsights(coupon = [], riskProfile = "balanced") {
   const rawQuality =
     confidenceAvg * 0.48 + leagueDiversity * 0.22 + timingScore * 0.2 + (100 - correlationRisk) * 0.15 + profileBoost;
   const qualityScore = Math.max(5, Math.min(99, Math.round(rawQuality)));
+  const stabilityValues = coupon.map((x) => Number(x?.stabilityScore || 55)).filter((x) => Number.isFinite(x));
+  const avgStability = stabilityValues.length
+    ? stabilityValues.reduce((a, b) => a + b, 0) / stabilityValues.length
+    : 55;
+  const reliabilityIndex = clamp(
+    Math.round(qualityScore * 0.45 + (100 - correlationRisk) * 0.2 + avgStability * 0.2 + timingScore * 0.15),
+    1,
+    100
+  );
 
   return {
     qualityScore,
+    reliabilityIndex,
     correlationRisk,
     minStartMinutes,
     confidenceAvg: Number(confidenceAvg.toFixed(1)),
@@ -473,6 +500,7 @@ function renderHealthPanel(coupon = [], riskProfile = "balanced", summary = {}) 
     <h3>Dashboard Sante du Coupon</h3>
     <p><span class="health-score ${statusClass}">Sante ${score}/100 - ${statusLabel}</span></p>
     <div class="meta">
+      <span>Fiabilite ticket: ${insights.reliabilityIndex}/100</span>
       <span>Stabilite: ${score >= 75 ? "Haute" : score >= 60 ? "Moyenne" : "Faible"}</span>
       <span>Correlation: ${insights.correlationRisk}%</span>
       <span>Confiance moyenne: ${Number(summary.averageConfidence || insights.confidenceAvg || 0)}%</span>
@@ -646,6 +674,8 @@ function renderHistory() {
 }
 
 async function generateCouponFallback(size, league, profile = "balanced") {
+  const normalizedProfile = normalizeRiskProfile(profile);
+  const effectiveSize = normalizedProfile === "ultra_safe" ? Math.min(3, size) : size;
   const listRes = await fetch("/api/matches", { cache: "no-store" });
   const listData = await readJsonSafe(listRes);
   if (!listRes.ok || !listData.success) {
@@ -660,7 +690,7 @@ async function generateCouponFallback(size, league, profile = "balanced") {
   const filtered = filteredByLeague.filter((m) => isStrictUpcomingMatch(m, nowSec));
 
   const sample = filtered.slice(0, 20);
-  const cfg = riskConfig(profile);
+  const cfg = riskConfig(normalizedProfile);
   const candidates = [];
   for (const m of sample) {
     try {
@@ -689,7 +719,10 @@ async function generateCouponFallback(size, league, profile = "balanced") {
   }
 
   candidates.sort((a, b) => b.safetyScore - a.safetyScore);
-  const picks = candidates.slice(0, size);
+  let picks = candidates.slice(0, effectiveSize);
+  if (normalizedProfile === "ultra_safe") {
+    picks = enforceUltraSafePolicy(picks);
+  }
   const combinedOdd = picks.length ? Number(picks.reduce((acc, x) => acc * x.cote, 1).toFixed(3)) : null;
   const averageConfidence = picks.length
     ? Number((picks.reduce((acc, x) => acc + x.confiance, 0) / picks.length).toFixed(1))
@@ -697,7 +730,7 @@ async function generateCouponFallback(size, league, profile = "balanced") {
 
   return {
     success: true,
-    riskProfile: profile,
+    riskProfile: normalizedProfile,
     coupon: picks,
     summary: { totalSelections: picks.length, combinedOdd, averageConfidence },
     warning:
@@ -899,7 +932,14 @@ async function sendLadderToTelegram() {
   }
   if (panel) panel.innerHTML = "<p>Envoi Ladder vers Telegram...</p>";
   try {
+    enforceStakeSafetyCap();
     await refreshLadderBeforeTelegram();
+    const liveInLadder = (lastLadderData?.items || []).some((it) =>
+      (Array.isArray(it?.coupon) ? it.coupon : []).some((x) => !isStrictUpcomingMatch(x, Math.floor(Date.now() / 1000)))
+    );
+    if (liveInLadder) {
+      throw new Error("Kill switch live: ladder contient un match deja demarre.");
+    }
     const res = await fetch("/api/coupon/ladder/send-telegram", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1201,6 +1241,7 @@ async function autoHealCouponByDrift() {
   try {
     const threshold = getDriftThreshold();
     let replaced = 0;
+    const events = [];
     const updated = [...lastCouponData.coupon];
     for (let i = 0; i < updated.length; i += 1) {
       const pick = updated[i];
@@ -1220,6 +1261,15 @@ async function autoHealCouponByDrift() {
         if (!rec?.pari) continue;
         if (String(rec.pari) === String(pick.pari)) {
           updated[i] = { ...pick, cote: Number(rec.cote || liveOdd), updatedAt: new Date().toISOString() };
+          events.push({
+            matchId: pick.matchId,
+            reason: "ODD_DRIFT_REFRESH",
+            fromPari: pick.pari,
+            toPari: pick.pari,
+            fromOdd: baseOdd,
+            toOdd: Number(rec.cote || liveOdd),
+            driftPercent: Number(drift.toFixed(2)),
+          });
         } else {
           updated[i] = {
             ...pick,
@@ -1230,10 +1280,20 @@ async function autoHealCouponByDrift() {
             updatedAt: new Date().toISOString(),
           };
           replaced += 1;
+          events.push({
+            matchId: pick.matchId,
+            reason: "ODD_DRIFT_REPLACE",
+            fromPari: pick.pari,
+            toPari: rec.pari,
+            fromOdd: baseOdd,
+            toOdd: Number(rec.cote || liveOdd),
+            driftPercent: Number(drift.toFixed(2)),
+          });
         }
       } catch {}
     }
-    if (replaced > 0) {
+    if (events.length > 0) {
+      const before = lastCouponData.coupon.map((x) => ({ matchId: x.matchId, pari: x.pari, cote: x.cote }));
       lastCouponData = {
         ...lastCouponData,
         coupon: updated,
@@ -1241,10 +1301,22 @@ async function autoHealCouponByDrift() {
         warning: `Auto-heal actif: ${replaced} pick(s) ajustes automatiquement suite au drift.`,
       };
       renderCoupon(lastCouponData);
+      const after = updated.map((x) => ({ matchId: x.matchId, pari: x.pari, cote: x.cote }));
+      createAuditEntry(
+        "auto_heal_drift",
+        {
+          driftThreshold: threshold,
+          riskProfile: lastCouponData.riskProfile || "balanced",
+          events,
+          before,
+          after,
+        },
+        { replaced, eventCount: events.length, ok: true }
+      );
       pushAlert({
         severity: "medium",
         title: "Auto-heal drift execute",
-        detail: `${replaced} selection(s) corrigee(s) automatiquement.`,
+        detail: `${events.length} ajustement(s), dont ${replaced} remplacement(s) automatique(s).`,
         type: "auto_heal",
       });
     }
@@ -1320,9 +1392,29 @@ function suggestStakeFromProfile() {
   const stakeInput = document.getElementById("stakeInput");
   if (!stakeInput || bankroll <= 0) return;
   const profile = getBankrollProfile();
-  const ratio = profile === "conservateur" ? 0.02 : profile === "attaque" ? 0.08 : 0.04;
+  const risk = normalizeRiskProfile(document.getElementById("riskSelect")?.value || "balanced");
+  const ratio = risk === "ultra_safe" || risk === "safe" ? 0.015 : profile === "conservateur" ? 0.02 : profile === "attaque" ? 0.08 : 0.04;
   const suggested = Math.max(100, Math.round((bankroll * ratio) / 100) * 100);
   stakeInput.value = String(suggested);
+}
+
+function enforceStakeSafetyCap() {
+  const stakeInput = document.getElementById("stakeInput");
+  const bankroll = Number(document.getElementById("bankrollInput")?.value || 0);
+  const risk = normalizeRiskProfile(document.getElementById("riskSelect")?.value || "balanced");
+  if (!stakeInput || bankroll <= 0) return;
+  if (risk !== "safe" && risk !== "ultra_safe") return;
+  const maxStake = Math.max(100, Math.floor((bankroll * 0.015) / 100) * 100);
+  const current = Number(stakeInput.value || 0);
+  if (current > maxStake) {
+    stakeInput.value = String(maxStake);
+    pushAlert({
+      severity: "medium",
+      title: "Stake cap safe applique",
+      detail: `Mise limitee a 1.5% bankroll (${maxStake}).`,
+      type: "stake_cap_safe",
+    });
+  }
 }
 
 async function createAuditEntry(action, payload, result) {
@@ -1492,7 +1584,9 @@ async function sendCouponPackToTelegram() {
   if (panel) panel.innerHTML = "<p>Envoi groupe en cours (texte + image + PDF)...</p>";
 
   try {
+    enforceStakeSafetyCap();
     await replaceStartedSelectionsBeforeTelegram();
+    await preflightTelegramSafety();
     await maybeStartAlertAndReplace();
     const adapted = await enforceTicketShield("envoi groupe Telegram");
     const payload = {
@@ -1663,6 +1757,44 @@ async function replaceStartedSelectionsBeforeTelegram() {
   renderCoupon(lastCouponData);
 }
 
+function getStartedSelectionsLocal(coupon = []) {
+  const nowSec = Math.floor(Date.now() / 1000);
+  return (Array.isArray(coupon) ? coupon : []).filter((x) => !isStrictUpcomingMatch(x, nowSec));
+}
+
+async function preflightTelegramSafety() {
+  if (!lastCouponData?.coupon?.length) return;
+  const started = getStartedSelectionsLocal(lastCouponData.coupon);
+  if (started.length) {
+    pushAlert({
+      severity: "high",
+      title: "Kill switch live actif",
+      detail: `${started.length} match(s) deja demarre(s). Envoi bloque puis remplacement requis.`,
+      type: "kill_switch_live",
+    });
+    throw new Error("Kill switch live: un ou plusieurs matchs ont deja commence.");
+  }
+
+  const insights = computeCouponInsights(lastCouponData.coupon, lastCouponData.riskProfile || "balanced");
+  const minStart = Number(insights?.minStartMinutes);
+  // Double-check automatique au plus pres de T-120s.
+  if (Number.isFinite(minStart) && minStart <= 2) {
+    const payload = {
+      driftThresholdPercent: getDriftThreshold(),
+      selections: lastCouponData.coupon.map((x) => ({
+        matchId: x.matchId,
+        pari: x.pari,
+        cote: x.cote,
+      })),
+    };
+    const report = await fetchValidationReport(payload);
+    if (String(report?.status || "") !== "TICKET_OK") {
+      renderValidation(report);
+      throw new Error("Double-check T-120s: ticket non valide, envoi Telegram bloque.");
+    }
+  }
+}
+
 async function refreshLadderBeforeTelegram() {
   if (!lastLadderData?.items?.length) return;
   const nowSec = Math.floor(Date.now() / 1000);
@@ -1754,6 +1886,7 @@ function renderCoupon(data) {
       <span>Profil: ${data.riskProfile || "balanced"}</span>
       <span>Ticket Shield: ACTIF</span>
       <span>Qualite: ${insights.qualityScore}/100</span>
+      <span>Fiabilite ticket: ${insights.reliabilityIndex}/100</span>
       <span>Risque correlation: ${insights.correlationRisk}%</span>
       <span>Deadline: ${insights.minStartMinutes == null ? "-" : formatMinutes(insights.minStartMinutes)}</span>
       <span>Mise ${stake.toFixed(0)} => Retour ${pay.payout.toFixed(2)} | Net ${pay.net.toFixed(2)}</span>
@@ -2014,6 +2147,17 @@ function createCouponSummary(coupon = []) {
   return { totalSelections, combinedOdd, averageConfidence };
 }
 
+function enforceUltraSafePolicy(coupon = []) {
+  const nowSec = Math.floor(Date.now() / 1000);
+  const filtered = (Array.isArray(coupon) ? coupon : [])
+    .filter((x) => isStrictUpcomingMatch(x, nowSec))
+    .filter((x) => Number(x?.cote) >= 1.3 && Number(x?.cote) <= 1.95)
+    .filter((x) => Number(x?.confiance) >= 72)
+    .slice(0, 3)
+    .map((x) => ({ ...x }));
+  return filtered;
+}
+
 function applyAntiCorrelation(coupon = [], targetSize = 3) {
   if (!Array.isArray(coupon) || !coupon.length || !isAntiCorrelationEnabled()) {
     return { coupon: Array.isArray(coupon) ? coupon : [], removed: 0, maxPerLeague: null };
@@ -2177,7 +2321,9 @@ async function sendCouponToTelegram(sendImage = false, mini = false) {
   if (panel) panel.innerHTML = `<p>Envoi Telegram ${mini ? "mini" : sendImage ? "image" : "texte"} en cours...</p>`;
 
   try {
+    enforceStakeSafetyCap();
     await replaceStartedSelectionsBeforeTelegram();
+    await preflightTelegramSafety();
     await maybeStartAlertAndReplace();
     const adapted = await enforceTicketShield("envoi Telegram");
 
@@ -2416,28 +2562,42 @@ async function generateCoupon() {
 
     try {
       const league = leagueSelect.value || "all";
-      const risk = document.getElementById("riskSelect")?.value || "balanced";
+      const risk = normalizeRiskProfile(document.getElementById("riskSelect")?.value || "balanced");
+      if (risk === "ultra_safe") {
+        const driftInput = document.getElementById("driftInput");
+        if (driftInput) driftInput.value = "4";
+      }
+      const apiRisk = risk === "ultra_safe" ? "safe" : risk;
+      const requestedSize = risk === "ultra_safe" ? Math.min(3, size) : size;
       let data;
     try {
       const res = await fetch(
-        `/api/coupon?size=${size}&league=${encodeURIComponent(league)}&risk=${encodeURIComponent(risk)}`,
+        `/api/coupon?size=${requestedSize}&league=${encodeURIComponent(league)}&risk=${encodeURIComponent(apiRisk)}`,
         { cache: "no-store" }
       );
       data = await readJsonSafe(res);
       if (!res.ok || !data.success) throw new Error(data.error || data.message || "Erreur /api/coupon");
       } catch (primaryErr) {
-        data = await generateCouponFallback(size, league, risk);
+        data = await generateCouponFallback(requestedSize, league, risk);
         if (!data?.success) throw primaryErr;
       }
-      const anti = applyAntiCorrelation(Array.isArray(data?.coupon) ? data.coupon : [], size);
+      let baseCoupon = Array.isArray(data?.coupon) ? data.coupon : [];
+      if (risk === "ultra_safe") {
+        baseCoupon = enforceUltraSafePolicy(baseCoupon);
+      }
+      const anti = applyAntiCorrelation(baseCoupon, requestedSize);
       data = {
         ...data,
+        riskProfile: risk,
         coupon: anti.coupon,
         summary: createCouponSummary(anti.coupon),
         warning: anti.removed > 0
           ? `Anti-correlation actif: ${anti.removed} pick(s) retire(s), max ${anti.maxPerLeague} par ligue. ${data?.warning || ""}`
           : data?.warning,
       };
+      if (risk === "ultra_safe") {
+        data.warning = `Mode Ultra-Safe: max 3 matchs, cote 1.30-1.95, confiance >=72%, pre-match uniquement. ${data.warning || ""}`;
+      }
       renderCoupon(data);
       lastCouponBackups = await buildBackupPlan(Array.isArray(data?.coupon) ? data.coupon : [], risk);
       renderServerHistoryPanel();
@@ -2692,6 +2852,7 @@ async function validateTicket() {
   panel.innerHTML = "<p>Validation ticket en cours...</p>";
 
   try {
+    enforceStakeSafetyCap();
     await maybeStartAlertAndReplace();
     simulateBankrollBeforeValidation();
     const insights = computeCouponInsights(lastCouponData.coupon, lastCouponData.riskProfile || "balanced");
@@ -2969,6 +3130,22 @@ async function initCouponPage() {
     });
   }
 
+  const riskSelect = document.getElementById("riskSelect");
+  if (riskSelect) {
+    riskSelect.value = normalizeRiskProfile(riskSelect.value || "balanced");
+    riskSelect.addEventListener("change", () => {
+      const risk = normalizeRiskProfile(riskSelect.value || "balanced");
+      if (risk === "ultra_safe") {
+        const driftInput = document.getElementById("driftInput");
+        const sizeInput = document.getElementById("sizeInput");
+        if (driftInput) driftInput.value = "4";
+        if (sizeInput && Number(sizeInput.value || 0) > 3) sizeInput.value = "3";
+      }
+      suggestStakeFromProfile();
+      enforceStakeSafetyCap();
+    });
+  }
+
   const antiSwitch = document.getElementById("antiCorrelationSwitch");
   if (antiSwitch) {
     antiSwitch.checked = isAntiCorrelationEnabled();
@@ -3041,6 +3218,7 @@ async function initCouponPage() {
   restartServerHistoryMonitor();
   startAutoCouponScheduler();
   suggestStakeFromProfile();
+  enforceStakeSafetyCap();
 
   if ("Notification" in window && Notification.permission === "default") {
     try {
@@ -3060,12 +3238,14 @@ initCouponPage();
 const stakeInput = document.getElementById("stakeInput");
 if (stakeInput) {
   stakeInput.addEventListener("input", () => {
+    enforceStakeSafetyCap();
     if (lastCouponData) renderCoupon(lastCouponData);
   });
 }
 const bankrollInput = document.getElementById("bankrollInput");
 if (bankrollInput) {
   bankrollInput.addEventListener("input", () => {
+    enforceStakeSafetyCap();
     if (lastCouponData) simulateBankrollBeforeValidation();
   });
 }

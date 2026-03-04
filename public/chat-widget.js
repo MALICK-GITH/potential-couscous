@@ -284,6 +284,11 @@
         if (!res.ok || !data.success) {
           throw new Error(data.message || data.error || "Erreur chat");
         }
+        if (data.provider) {
+          const model = String(data.model || "n/a");
+          const tried = Array.isArray(data.tried) && data.tried.length ? ` | fallback: ${data.tried.join(" -> ")}` : "";
+          push("ai", `Source IA: ${String(data.provider)} | modele: ${model}${tried}`);
+        }
         push("ai", data.answer || "Aucune reponse.");
         const actions = Array.isArray(data.actions) ? data.actions : [];
         for (let i = 0; i < actions.length; i += 1) {

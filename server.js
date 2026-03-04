@@ -2380,6 +2380,7 @@ app.post("/api/chat", async (req, res) => {
           success: true,
           provider: "anthropic",
           model: result.model,
+          tried: ["anthropic"],
           answer,
           actions,
         });
@@ -2408,6 +2409,7 @@ app.post("/api/chat", async (req, res) => {
           success: true,
           provider: "slok",
           model: slokResult.model,
+          tried: ["anthropic", "slok"],
           answer,
           actions,
         });
@@ -2422,6 +2424,7 @@ app.post("/api/chat", async (req, res) => {
       success: true,
       provider: "local-fallback",
       model: "local-fallback",
+      tried: ["anthropic", "slok", "local-fallback"],
       answer: `${
         isSiteQuestion(message)
           ? localChatFallback(message, { page, league, matchId })
