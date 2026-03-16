@@ -108,6 +108,68 @@ h1 {
   gap: 0.55rem;
 }
 
+.coupon-panel {
+  border: 1px solid rgba(93, 170, 255, 0.35);
+  background: linear-gradient(150deg, rgba(12, 20, 40, 0.96), rgba(8, 14, 26, 0.98));
+}
+
+.coupon-head h2 {
+  margin: 0 0 0.25rem;
+}
+
+.coupon-head p {
+  margin: 0 0 1rem;
+  color: rgba(216, 231, 248, 0.75);
+}
+
+.coupon-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0.75rem;
+}
+
+.coupon-grid label {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+}
+
+.coupon-grid input,
+.coupon-grid select {
+  background: rgba(6, 12, 24, 0.75);
+  border: 1px solid rgba(109, 170, 255, 0.35);
+  color: #e8f2ff;
+  border-radius: 10px;
+  padding: 0.45rem 0.6rem;
+}
+
+.coupon-actions {
+  margin-top: 1rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.55rem;
+}
+
+.coupon-action-btn {
+  border-radius: 999px;
+  border: 1px solid rgba(88, 214, 255, 0.4);
+  background: rgba(24, 40, 70, 0.65);
+  color: #dbe8ff;
+  padding: 0.55rem 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.coupon-action-btn:hover {
+  border-color: rgba(88, 214, 255, 0.8);
+}
+
+.coupon-note {
+  margin: 0.85rem 0 0;
+  font-size: 0.8rem;
+  color: rgba(209, 223, 255, 0.75);
+}
+
 .mini-control {
   display: inline-flex;
   align-items: center;
@@ -256,6 +318,17 @@ h1 {
   display: block;
   color: var(--muted);
   font-size: 0.71rem;
+}
+
+body.low-data .analytics-panel,
+body.low-data #kpiGrid,
+body.low-data #chartRadar,
+body.low-data #chartFlow {
+  display: none;
+}
+
+body.low-data .panel#markets {
+  opacity: 0.6;
 }
 
 .kpi strong {

@@ -32,6 +32,10 @@
             <option value="all">Toutes les ligues</option>
           </select>
         </label>
+        <label class="league-filter" for="lowDataToggle">
+          <span>Low-data</span>
+          <input id="lowDataToggle" type="checkbox" />
+        </label>
         <a class="coupon-page-link" href="/coupon.html">Page Coupon</a>
         <a class="coupon-page-link" href="/mode-emploi.html">Mode d'emploi</a>
         <a class="coupon-page-link" href="/about.html">A propos du createur</a>
@@ -54,6 +58,33 @@
         Aucun match FIFA penalty detecte pour le moment.
       </p>
     </main>
+
+    <div class="welcome-modal hidden" id="welcomeModal" role="dialog" aria-modal="true">
+      <div class="welcome-card">
+        <button class="welcome-close" id="welcomeClose" type="button" aria-label="Fermer">×</button>
+        <p class="welcome-tag">SOLITFIFPRO225</p>
+        <h2>Bienvenue sur le hub FIFA Virtuel</h2>
+        <p>Rejoins la communaute et garde le contact direct pour les alertes, coupons et aides.</p>
+        <div class="welcome-actions">
+          <a class="welcome-btn primary" href="https://t.me/SOLITAIREHACKGENIUS" target="_blank" rel="noreferrer">
+            Rejoindre le groupe Telegram
+          </a>
+          <a class="welcome-btn" href="https://wa.me/2250576459875" target="_blank" rel="noreferrer">
+            WhatsApp Principal
+          </a>
+          <a class="welcome-btn" href="https://wa.me/2250150588136" target="_blank" rel="noreferrer">
+            WhatsApp Support
+          </a>
+          <a class="welcome-btn" href="https://t.me/Solitaire666" target="_blank" rel="noreferrer">
+            Contact prive
+          </a>
+        </div>
+        <label class="welcome-optout">
+          <input id="welcomeHide" type="checkbox" />
+          <span>Ne plus afficher cette fenetre</span>
+        </label>
+      </div>
+    </div>
 
     <footer>
       <small id="updatedAt"></small>

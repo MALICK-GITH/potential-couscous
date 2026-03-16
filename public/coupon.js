@@ -30,6 +30,16 @@ const AUTO_COUPON_TG_KEY = "fc25_auto_coupon_tg_v1";
 const LOW_DATA_MODE_KEY = "fc25_low_data_mode_v1";
 const AUTO_HEAL_KEY = "fc25_auto_heal_v1";
 const PRE_SEND_LOCK_KEY = "fc25_pre_send_lock_v1";
+const COUPON_SIZE_KEY = "fc25_coupon_size_v1";
+const COUPON_LEAGUE_KEY = "fc25_coupon_league_v1";
+const COUPON_RISK_KEY = "fc25_coupon_risk_v1";
+const COUPON_STAKE_KEY = "fc25_coupon_stake_v1";
+const COUPON_BANKROLL_KEY = "fc25_coupon_bankroll_v1";
+const COUPON_START_ALERT_KEY = "fc25_coupon_start_alert_v1";
+const COUPON_DRIFT_KEY = "fc25_coupon_drift_v1";
+const COUPON_WATCH_DELTA_KEY = "fc25_coupon_watch_delta_v1";
+
+let pendingLeagueValue = null;
 const DEFAULT_PAGE_REFRESH_MINUTES = 5;
 let pageRefreshCouponIntervalId = null;
 let liveSimulationIntervalId = null;
@@ -175,6 +185,27 @@ function isPreSendLockEnabled() {
   const v = localStorage.getItem(PRE_SEND_LOCK_KEY);
   if (v == null) return true;
   return v === "1";
+}
+
+function getStoredNumber(key, fallback) {
+  const raw = Number(localStorage.getItem(key));
+  return Number.isFinite(raw) ? raw : fallback;
+}
+
+function setStoredNumber(key, value) {
+  const safe = Number(value);
+  if (!Number.isFinite(safe)) return;
+  localStorage.setItem(key, String(safe));
+}
+
+function getStoredString(key, fallback = "") {
+  const raw = localStorage.getItem(key);
+  return raw == null ? fallback : String(raw);
+}
+
+function setStoredString(key, value) {
+  if (value == null) return;
+  localStorage.setItem(key, String(value));
 }
 
 function setPreSendLockEnabled(value) {
@@ -3364,7 +3395,61 @@ if (downloadPdfBtnSticky) {
   downloadPdfBtnSticky.addEventListener("click", downloadCouponPdfPack);
 }
 
+function applyStoredCouponFormValues() {
+  const sizeInput = document.getElementById("sizeInput");
+  if (sizeInput) sizeInput.value = String(getStoredNumber(COUPON_SIZE_KEY, Number(sizeInput.value || 3)));
+  const riskSelect = document.getElementById("riskSelect");
+  if (riskSelect) riskSelect.value = getStoredString(COUPON_RISK_KEY, riskSelect.value || "balanced");
+  const stakeInput = document.getElementById("stakeInput");
+  if (stakeInput) stakeInput.value = String(getStoredNumber(COUPON_STAKE_KEY, Number(stakeInput.value || 1000)));
+  const bankrollInput = document.getElementById("bankrollInput");
+  if (bankrollInput) bankrollInput.value = String(getStoredNumber(COUPON_BANKROLL_KEY, Number(bankrollInput.value || 25000)));
+  const startAlertInput = document.getElementById("startAlertInput");
+  if (startAlertInput) startAlertInput.value = String(getStoredNumber(COUPON_START_ALERT_KEY, Number(startAlertInput.value || 8)));
+  const driftInput = document.getElementById("driftInput");
+  if (driftInput) driftInput.value = String(getStoredNumber(COUPON_DRIFT_KEY, Number(driftInput.value || 6)));
+  const watchInput = document.getElementById("watchDeltaInput");
+  if (watchInput) watchInput.value = String(getStoredNumber(COUPON_WATCH_DELTA_KEY, Number(watchInput.value || 0.15)));
+  const leagueStored = getStoredString(COUPON_LEAGUE_KEY, "");
+  if (leagueStored) pendingLeagueValue = leagueStored;
+}
+
+function applyQueryOverrides() {
+  const params = new URLSearchParams(window.location.search);
+  const size = params.get("size");
+  const league = params.get("league");
+  const risk = params.get("risk");
+  const stake = params.get("stake");
+  const bankroll = params.get("bankroll");
+  const startAlert = params.get("startAlert");
+  const drift = params.get("drift");
+  const watchDelta = params.get("watchDelta");
+
+  if (size != null) setStoredNumber(COUPON_SIZE_KEY, size);
+  if (league) {
+    setStoredString(COUPON_LEAGUE_KEY, league);
+    pendingLeagueValue = league;
+  }
+  if (risk) setStoredString(COUPON_RISK_KEY, risk);
+  if (stake != null) setStoredNumber(COUPON_STAKE_KEY, stake);
+  if (bankroll != null) setStoredNumber(COUPON_BANKROLL_KEY, bankroll);
+  if (startAlert != null) setStoredNumber(COUPON_START_ALERT_KEY, startAlert);
+  if (drift != null) setStoredNumber(COUPON_DRIFT_KEY, drift);
+  if (watchDelta != null) setStoredNumber(COUPON_WATCH_DELTA_KEY, watchDelta);
+}
+
+function applyPendingLeagueSelection() {
+  if (!pendingLeagueValue) return;
+  const leagueSelect = document.getElementById("leagueSelect");
+  if (!leagueSelect) return;
+  const wanted = String(pendingLeagueValue);
+  leagueSelect.value = Array.from(leagueSelect.options).some((o) => o.value === wanted) ? wanted : "all";
+}
+
 async function initCouponPage() {
+  applyStoredCouponFormValues();
+  applyQueryOverrides();
+
   const refreshInput = document.getElementById("refreshMinutesCouponInput");
   if (refreshInput) {
     const m = getPageRefreshMinutesCoupon();
@@ -3437,6 +3522,7 @@ async function initCouponPage() {
       suggestStakeFromProfile();
       enforceStakeSafetyCap();
     });
+    riskSelect.addEventListener("change", () => setStoredString(COUPON_RISK_KEY, riskSelect.value));
   }
 
   const antiSwitch = document.getElementById("antiCorrelationSwitch");
@@ -3518,6 +3604,7 @@ async function initCouponPage() {
   }
 
   await loadLeagues();
+  applyPendingLeagueSelection();
   renderHistory();
   renderAlertsPanel();
   renderOddsJournalPanel();
@@ -3532,6 +3619,35 @@ async function initCouponPage() {
   suggestStakeFromProfile();
   enforceStakeSafetyCap();
 
+  const sizeInput = document.getElementById("sizeInput");
+  if (sizeInput) {
+    sizeInput.addEventListener("change", () => setStoredNumber(COUPON_SIZE_KEY, sizeInput.value));
+  }
+  const leagueSelect = document.getElementById("leagueSelect");
+  if (leagueSelect) {
+    leagueSelect.addEventListener("change", () => setStoredString(COUPON_LEAGUE_KEY, leagueSelect.value));
+  }
+  const stakeInput = document.getElementById("stakeInput");
+  if (stakeInput) {
+    stakeInput.addEventListener("change", () => setStoredNumber(COUPON_STAKE_KEY, stakeInput.value));
+  }
+  const bankrollInput = document.getElementById("bankrollInput");
+  if (bankrollInput) {
+    bankrollInput.addEventListener("change", () => setStoredNumber(COUPON_BANKROLL_KEY, bankrollInput.value));
+  }
+  const startAlertInput = document.getElementById("startAlertInput");
+  if (startAlertInput) {
+    startAlertInput.addEventListener("change", () => setStoredNumber(COUPON_START_ALERT_KEY, startAlertInput.value));
+  }
+  const driftInput = document.getElementById("driftInput");
+  if (driftInput) {
+    driftInput.addEventListener("change", () => setStoredNumber(COUPON_DRIFT_KEY, driftInput.value));
+  }
+  const watchDeltaInput = document.getElementById("watchDeltaInput");
+  if (watchDeltaInput) {
+    watchDeltaInput.addEventListener("change", () => setStoredNumber(COUPON_WATCH_DELTA_KEY, watchDeltaInput.value));
+  }
+
   if ("Notification" in window && Notification.permission === "default") {
     try {
       Notification.requestPermission();
@@ -3542,6 +3658,35 @@ async function initCouponPage() {
     setTimeout(() => {
       generateCoupon();
     }, 250);
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  const action = String(params.get("action") || "").toLowerCase();
+  if (action) {
+    setTimeout(async () => {
+      if (action === "generate") return generateCoupon();
+      if (action === "ladder") return generateLadderCoupons();
+      if (action === "multi") return renderMultiStrategy();
+      if (action === "validate") return validateTicket();
+      if (action === "replace_weak") return replaceWeakSelection();
+      if (action === "simulate_bankroll") return simulateBankrollBeforeValidation();
+      if (action === "send_tg") return sendCouponToTelegram(false);
+      if (action === "send_tg_mini") return sendCouponToTelegram(false, true);
+      if (action === "send_tg_ladder") return sendLadderToTelegram();
+      if (action === "send_pack") return sendCouponPackToTelegram();
+      if (action === "send_image") return sendCouponToTelegram(true);
+      if (action === "download_image") return downloadCouponImage("default");
+      if (action === "download_image_premium") return downloadCouponImage("premium");
+      if (action === "download_story") return downloadCouponImage("story");
+      if (action === "download_pdf_quick") return downloadCouponPdf("quick");
+      if (action === "download_pdf") return downloadCouponPdf("summary");
+      if (action === "download_pdf_detailed") return downloadCouponPdf("detailed");
+      if (action === "export_pro") return exportProReport();
+      if (action === "analyze_journal") return renderPerformanceJournal();
+      if (action === "replay_journal") return renderPerformanceReplay();
+      if (action === "watchlist") return buildWatchlistFromCoupon();
+      return null;
+    }, 350);
   }
 }
 

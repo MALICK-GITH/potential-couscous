@@ -5,6 +5,9 @@ const previousOddsByMatch = new Map();
 const STRONG_ODD_CHANGE_PERCENT = 9;
 const ODD_ALERT_COOLDOWN_MS = 90 * 1000;
 const oddAlertLastShown = new Map();
+const LOW_DATA_MODE_KEY = "fc25_low_data_mode_v1";
+let lastFetchedAt = null;
+const WELCOME_MODAL_KEY = "fc25_welcome_modal_v1";
 
 function formatTime(unixSeconds) {
   if (!unixSeconds) return "Heure non disponible";
@@ -79,6 +82,34 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
+function isLowDataModeEnabled() {
+  return localStorage.getItem(LOW_DATA_MODE_KEY) === "1";
+}
+
+function setLowDataMode(value) {
+  localStorage.setItem(LOW_DATA_MODE_KEY, value ? "1" : "0");
+  document.body.classList.toggle("low-data", Boolean(value));
+}
+
+function initWelcomeModal() {
+  const modal = document.getElementById("welcomeModal");
+  if (!modal) return;
+  const closeBtn = document.getElementById("welcomeClose");
+  const hideToggle = document.getElementById("welcomeHide");
+  const stored = localStorage.getItem(WELCOME_MODAL_KEY);
+  if (stored === "hidden") return;
+  modal.classList.remove("hidden");
+
+  const close = () => {
+    if (hideToggle?.checked) localStorage.setItem(WELCOME_MODAL_KEY, "hidden");
+    modal.classList.add("hidden");
+  };
+  if (closeBtn) closeBtn.addEventListener("click", close);
+  modal.addEventListener("click", (event) => {
+    if (event.target === modal) close();
+  });
+}
+
 function computeReliabilityScore(match) {
   const h = Number(match?.odds1x2?.home);
   const d = Number(match?.odds1x2?.draw);
@@ -105,7 +136,27 @@ function computeReliabilityScore(match) {
   const minsToStart = start > nowSec ? (start - nowSec) / 60 : -1;
   const timingBonus = minsToStart > 0 && minsToStart <= 45 ? 8 : minsToStart > 45 ? 4 : 0;
 
-  const raw = 28 + marketClarity * 0.55 + timingBonus + statusBonus - volatilityPenalty;
+  const betCount = Number(match?.betsCount || 0);
+  const marketDepth =
+    betCount >= 60 ? 14 : betCount >= 40 ? 10 : betCount >= 25 ? 6 : betCount >= 10 ? 2 : -6;
+
+  let freshness = 0;
+  if (match?.fetchedAt) {
+    const ageSec = Math.max(0, (Date.now() - Date.parse(match.fetchedAt)) / 1000);
+    freshness =
+      ageSec <= 30 ? 12 : ageSec <= 90 ? 8 : ageSec <= 180 ? 5 : ageSec <= 300 ? 2 : -6;
+  }
+
+  const oddsBonus = hasOdds ? 8 : -6;
+  const raw =
+    32 +
+    marketClarity * 0.45 +
+    timingBonus +
+    statusBonus +
+    marketDepth +
+    freshness +
+    oddsBonus -
+    volatilityPenalty;
   return Math.round(clamp(raw, 10, 99));
 }
 
@@ -181,6 +232,8 @@ function createMatchCard(match, index) {
   card.style.animationDelay = `${Math.min(index * 0.04, 0.6)}s`;
   const score = extractScore(match.score);
   const status = match.statusText || "A venir";
+  const quality = Number(match.reliabilityScore || 0);
+  const qualityClass = quality >= 75 ? "quality-high" : quality >= 60 ? "quality-mid" : "quality-low";
 
   const detailLink = document.createElement("a");
   detailLink.className = "detail-btn";
@@ -191,7 +244,7 @@ function createMatchCard(match, index) {
     <div class="league-row">
       <p class="league">${match.league || "Ligue virtuelle"}</p>
       <div class="league-badges">
-        <span class="reliability-pill">Fiabilite ${match.reliabilityScore ?? 0}%</span>
+        <span class="reliability-pill ${qualityClass}">Qualite ${quality}%</span>
         <span class="status-pill">${status}</span>
       </div>
     </div>
@@ -300,7 +353,8 @@ function enrichWithTrend(matches) {
     return {
       ...match,
       trend,
-      reliabilityScore: computeReliabilityScore({ ...match, trend }),
+      fetchedAt: lastFetchedAt,
+      reliabilityScore: computeReliabilityScore({ ...match, trend, fetchedAt: lastFetchedAt }),
     };
   });
   if (alerts.length) {
@@ -437,6 +491,7 @@ async function loadMatches() {
     if (!res.ok || !data.success) throw new Error(data.error || data.message || "Reponse API invalide");
 
     const rawMatches = Array.isArray(data.matches) ? data.matches : [];
+    lastFetchedAt = data.fetchedAt || null;
     allMatches = enrichWithTrend(rawMatches);
     const mode = data.filterMode === "keyword-penalty" ? "filtre mot-cle" : "fallback groupe gr=285";
     currentModeLabel = `mode: ${mode}`;
@@ -460,6 +515,17 @@ async function loadMatches() {
 
 document.getElementById("refreshBtn").addEventListener("click", loadMatches);
 document.getElementById("leagueSelect").addEventListener("change", renderMatches);
+const lowDataToggle = document.getElementById("lowDataToggle");
+if (lowDataToggle) {
+  const enabled = isLowDataModeEnabled();
+  lowDataToggle.checked = enabled;
+  setLowDataMode(enabled);
+  lowDataToggle.addEventListener("change", () => {
+    setLowDataMode(Boolean(lowDataToggle.checked));
+  });
+} else {
+  setLowDataMode(isLowDataModeEnabled());
+}
 document.querySelectorAll(".match-mode").forEach((btn) => {
   btn.addEventListener("click", () => {
     currentMatchMode = btn.dataset.mode || "upcoming";
@@ -472,6 +538,7 @@ setInterval(() => {
   const wrap = document.getElementById("matches");
   if (wrap) activateAmbientOddsPulse(wrap);
 }, 2300);
+initWelcomeModal();
 
 function registerHomeSiteControl() {
   window.SiteControl = {
@@ -485,6 +552,7 @@ function registerHomeSiteControl() {
       "set_league",
       "open_coupon_page",
       "open_match_first",
+      "set_low_data",
     ],
     execute(name, payload = {}) {
       const action = String(name || "").toLowerCase();
@@ -535,6 +603,13 @@ function registerHomeSiteControl() {
           return true;
         }
         return false;
+      }
+      if (action === "set_low_data") {
+        const desired = typeof payload?.enabled === "boolean" ? payload.enabled : !isLowDataModeEnabled();
+        const toggle = document.getElementById("lowDataToggle");
+        if (toggle) toggle.checked = Boolean(desired);
+        setLowDataMode(Boolean(desired));
+        return true;
       }
       return false;
     },
