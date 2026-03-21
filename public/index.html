@@ -23,7 +23,13 @@
     <header class="hero">
       <p class="tag">Live Feed 1xBet</p>
       <h1>SOLITFIFPRO225</h1>
-      <p id="subTitle">Hub FIFA Virtuel - matchs live, details, coupons et exports.</p>
+      <p id="subTitle">Hub FIFA Virtuel - matchs live, details et exports.</p>
+      <div class="denicheur-hero-row">
+        <button type="button" class="denicheur-cta" id="denicheurLaunchBtn">
+          Lancer le denicheur (match ~10 min)
+        </button>
+        <p class="denicheur-hero-hint">Recherche un match qui demarre vers 10 min, puis affiche scores et probabilites.</p>
+      </div>
       <div class="controls">
         <button id="refreshBtn" type="button">Actualiser</button>
         <label class="league-filter" for="leagueSelect">
@@ -45,97 +51,23 @@
 
     <main>
       <section class="stats" id="stats"></section>
-      <section class="panel coupon-panel compact" id="couponControlPanelHome">
-        <div class="coupon-head">
-          <h2>Centre Coupon Pro</h2>
-          <p>Configure une fois, lance un coupon en un clic.</p>
-        </div>
-        <div class="coupon-grid">
-          <label>
-            <span>Nombre de matchs</span>
-            <input id="sizeInput" type="number" min="1" max="12" value="3" />
-          </label>
-          <label>
-            <span>Ligue</span>
-            <select id="leagueSelect">
-              <option value="all">Toutes les ligues</option>
-            </select>
-          </label>
-          <label>
-            <span>Profil de risque</span>
-            <select id="riskSelect">
-              <option value="ultra_safe">Ultra-Safe</option>
-              <option value="safe">Safe</option>
-              <option value="balanced" selected>Equilibre</option>
-              <option value="aggressive">Agressif</option>
-            </select>
-          </label>
-          <label>
-            <span>Mise simulee</span>
-            <input id="stakeInput" type="number" min="100" step="100" value="1000" />
-          </label>
-          <label>
-            <span>Bankroll initiale</span>
-            <input id="bankrollInput" type="number" min="1000" step="500" value="25000" />
-          </label>
-          <label>
-            <span>Alerte demarrage (min)</span>
-            <input id="startAlertInput" type="number" min="1" max="30" step="1" value="8" />
-          </label>
-          <label>
-            <span>Seuil drift (%)</span>
-            <input id="driftInput" type="number" min="2" max="25" step="1" value="6" />
-          </label>
-          <label>
-            <span>Watchlist delta cote</span>
-            <input id="watchDeltaInput" type="number" min="0.01" max="2" step="0.01" value="0.15" />
-          </label>
-          <label class="mini-toggle">
-            <input id="autoCouponSwitch" type="checkbox" />
-            <span>Mode Auto-Coupon</span>
-          </label>
-          <label class="mini-toggle">
-            <input id="autoCouponTelegramSwitch" type="checkbox" />
-            <span>Auto Telegram si qualite OK</span>
-          </label>
-          <label class="mini-toggle">
-            <input id="antiCorrelationSwitch" type="checkbox" checked />
-            <span>Anti-correlation auto</span>
-          </label>
-          <label class="mini-toggle">
-            <input id="antiChaosSwitch" type="checkbox" checked />
-            <span>Filtre anti-chaos</span>
-          </label>
-          <label class="mini-toggle">
-            <input id="autoHealSwitch" type="checkbox" />
-            <span>Auto-Heal drift</span>
-          </label>
-          <label class="mini-toggle">
-            <input id="preSendLockSwitch" type="checkbox" checked />
-            <span>Verrouillage pre-envoi T-60</span>
-          </label>
-          <label class="mini-toggle">
-            <input id="lowDataSwitch" type="checkbox" />
-            <span>Mode low-data mobile</span>
-          </label>
-        </div>
-        <div class="coupon-actions">
-          <button class="coupon-action-btn" data-action="open">Ouvrir Coupon</button>
-          <button class="coupon-action-btn" data-action="generate">Generer Coupon</button>
-          <button class="coupon-action-btn" data-action="ladder">Coupon Ladder IA</button>
-          <button class="coupon-action-btn" data-action="multi">3 Strategies</button>
-          <button class="coupon-action-btn" data-action="validate">Valider Ticket Pro</button>
-          <button class="coupon-action-btn" data-action="send_tg">Envoyer Telegram</button>
-          <button class="coupon-action-btn" data-action="send_image">Telegram Image</button>
-          <button class="coupon-action-btn" data-action="download_image">Image Coupon</button>
-          <button class="coupon-action-btn" data-action="download_pdf">PDF Resume</button>
-        </div>
-        <p class="coupon-note">Tous les parametres sont synchronises avec la page coupon.</p>
-      </section>
       <section class="league-heatmap" id="leagueHeatmap"></section>
+      <section class="match-finder" id="matchFinder" aria-labelledby="matchFinderTitle">
+        <div class="finder-head">
+          <div>
+            <h2 id="matchFinderTitle">Denicheur de match</h2>
+            <p class="finder-sub">
+              Pepites classees par valeur de marche, fiabilite, liquidite et fenetre avant coup d'envoi.
+            </p>
+          </div>
+          <span class="finder-badge" id="finderBadge" aria-hidden="true"></span>
+        </div>
+        <div class="finder-grid" id="finderGrid"></div>
+      </section>
       <section class="match-modes" id="matchModes">
         <button class="match-mode active" type="button" data-mode="upcoming">A venir</button>
         <button class="match-mode" type="button" data-mode="turbo">Turbo Top 10</button>
+        <button class="match-mode" type="button" data-mode="finder">Denicheur</button>
         <button class="match-mode" type="button" data-mode="live">En cours</button>
         <button class="match-mode" type="button" data-mode="finished">Termines</button>
       </section>
@@ -145,6 +77,15 @@
         Aucun match FIFA penalty detecte pour le moment.
       </p>
     </main>
+
+    <div class="welcome-modal denicheur-modal hidden" id="denicheurModal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="denicheurModalTitle">
+      <div class="denicheur-card welcome-card">
+        <button type="button" class="welcome-close" id="denicheurModalClose" aria-label="Fermer">×</button>
+        <p class="welcome-tag">Denicheur</p>
+        <h2 id="denicheurModalTitle">Choix du denicheur</h2>
+        <div id="denicheurModalBody" class="denicheur-modal-body"></div>
+      </div>
+    </div>
 
     <div class="welcome-modal hidden" id="welcomeModal" role="dialog" aria-modal="true">
       <div class="welcome-card">

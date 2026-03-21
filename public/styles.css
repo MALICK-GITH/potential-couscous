@@ -109,6 +109,201 @@ h1 {
   font-size: 0.93rem;
 }
 
+.denicheur-hero-row {
+  margin: 1rem 1.25rem 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+}
+
+.denicheur-cta {
+  border: 1px solid rgba(66, 245, 108, 0.55);
+  color: #071320;
+  background: linear-gradient(95deg, #42f56c, #7cffb2 48%, #58d6ff);
+  border-radius: 999px;
+  padding: 0.62rem 1.15rem;
+  font-family: "Chakra Petch", sans-serif;
+  font-weight: 800;
+  font-size: 0.88rem;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(66, 245, 108, 0.22);
+}
+
+.denicheur-cta:hover {
+  filter: brightness(1.06);
+}
+
+.denicheur-hero-hint {
+  margin: 0;
+  flex: 1 1 200px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  max-width: 36ch;
+}
+
+.denicheur-modal {
+  z-index: 70;
+}
+
+.denicheur-card {
+  text-align: left;
+  width: min(520px, 100%);
+}
+
+.denicheur-card h2 {
+  text-align: center;
+}
+
+.denicheur-modal-body {
+  margin-top: 0.5rem;
+}
+
+.denicheur-intro {
+  margin: 0 0 0.5rem;
+  color: rgba(219, 232, 255, 0.92);
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
+.denicheur-search-note {
+  margin: 0 0 0.85rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 10px;
+  background: rgba(88, 214, 255, 0.08);
+  border: 1px solid rgba(88, 214, 255, 0.2);
+  color: #b8d7ff;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.denicheur-match-block {
+  padding: 0.85rem 0.95rem;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(8, 14, 28, 0.65);
+  margin-bottom: 1rem;
+}
+
+.denicheur-league {
+  margin: 0 0 0.35rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.denicheur-teams {
+  margin: 0 0 0.45rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #f0f7ff;
+  line-height: 1.3;
+}
+
+.denicheur-vs {
+  color: #58d6ff;
+  font-weight: 800;
+  margin: 0 0.2rem;
+}
+
+.denicheur-kick {
+  margin: 0 0 0.65rem;
+  font-size: 0.82rem;
+  color: rgba(219, 232, 255, 0.88);
+}
+
+.denicheur-odds-mini {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.85rem;
+  font-family: "Chakra Petch", sans-serif;
+  font-size: 0.82rem;
+  color: #c5daf5;
+}
+
+.denicheur-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0.65rem;
+  margin-bottom: 0.75rem;
+}
+
+.denicheur-metric {
+  padding: 0.65rem 0.75rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(12, 22, 42, 0.75);
+}
+
+.denicheur-metric-label {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin-bottom: 0.35rem;
+  line-height: 1.3;
+}
+
+.denicheur-metric-value {
+  display: block;
+  font-family: "Chakra Petch", sans-serif;
+  font-size: 1.65rem;
+  font-weight: 800;
+  color: #7cffb2;
+  line-height: 1.1;
+}
+
+.denicheur-metric-value.denicheur-accent {
+  color: #ffd166;
+}
+
+.denicheur-metric-hint {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.68rem;
+  color: rgba(200, 215, 240, 0.65);
+  line-height: 1.3;
+}
+
+.denicheur-disclaimer {
+  margin: 0 0 1rem;
+  font-size: 0.72rem;
+  color: rgba(200, 215, 240, 0.55);
+}
+
+.denicheur-detail-btn {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  padding: 0.65rem 1rem;
+  border-radius: 999px;
+  font-family: "Chakra Petch", sans-serif;
+  font-weight: 700;
+  text-decoration: none;
+  color: #0c1426;
+  background: linear-gradient(120deg, rgba(88, 214, 255, 0.85), rgba(71, 255, 156, 0.88));
+  border: 1px solid rgba(88, 214, 255, 0.5);
+}
+
+.denicheur-detail-btn:hover {
+  filter: brightness(1.05);
+}
+
+.denicheur-loading,
+.denicheur-error {
+  margin: 0;
+  text-align: center;
+  color: rgba(219, 232, 255, 0.9);
+  font-size: 0.92rem;
+}
+
+.denicheur-error {
+  color: #ffb4b4;
+}
+
 .controls {
   margin-top: 0.85rem;
   margin-bottom: 1.05rem;
@@ -265,6 +460,151 @@ footer {
   margin-top: 0.35rem;
   color: var(--muted);
   font-size: 0.75rem;
+}
+
+.match-finder {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: linear-gradient(165deg, rgba(14, 28, 52, 0.96), rgba(8, 14, 30, 0.92));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  padding: 0.78rem;
+  margin-bottom: 0.9rem;
+}
+
+.finder-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-bottom: 0.64rem;
+}
+
+.finder-head h2 {
+  margin: 0 0 0.28rem;
+  font-size: 1rem;
+  font-family: "Chakra Petch", sans-serif;
+  color: #e8fbff;
+}
+
+.finder-sub {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  max-width: 52ch;
+}
+
+.finder-badge {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  font-family: "Chakra Petch", sans-serif;
+  font-weight: 700;
+  color: #42f56c;
+  border: 1px solid rgba(66, 245, 108, 0.35);
+  border-radius: 999px;
+  padding: 0.28rem 0.55rem;
+  background: rgba(10, 22, 40, 0.9);
+}
+
+.finder-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.finder-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: 0.55rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.52rem 0.62rem;
+  background: rgba(10, 18, 34, 0.88);
+}
+
+.finder-rank {
+  font-family: "Chakra Petch", sans-serif;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: #8aa4c8;
+  min-width: 2rem;
+}
+
+.finder-main {
+  min-width: 0;
+}
+
+.finder-main strong {
+  display: block;
+  font-size: 0.82rem;
+  color: #f0f7ff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.finder-main small {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.finder-pill {
+  font-family: "Chakra Petch", sans-serif;
+  font-weight: 800;
+  font-size: 0.88rem;
+  padding: 0.22rem 0.48rem;
+  border-radius: 8px;
+  min-width: 2.4rem;
+  text-align: center;
+}
+
+.finder-pill.finder-high {
+  color: #071320;
+  background: linear-gradient(90deg, #42f56c, #9effc4);
+}
+
+.finder-pill.finder-mid {
+  color: #0a1424;
+  background: linear-gradient(90deg, #ffd166, #ffe8a3);
+}
+
+.finder-pill.finder-low {
+  color: #e8f2ff;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.finder-link {
+  font-family: "Chakra Petch", sans-serif;
+  font-weight: 700;
+  font-size: 0.78rem;
+  color: #7cdbff;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.finder-link:hover {
+  text-decoration: underline;
+}
+
+.finder-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+@media (max-width: 560px) {
+  .finder-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .finder-badge {
+    align-self: flex-start;
+  }
 }
 
 .stat-box {
@@ -553,6 +893,7 @@ body.low-data .team-logo {
 }
 
 body.low-data .league-heatmap,
+body.low-data .match-finder,
 body.low-data .odd-alerts {
   display: none;
 }

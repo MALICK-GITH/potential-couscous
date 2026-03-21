@@ -3,26 +3,6 @@ const DRIFT_THRESHOLD_PERCENT = 8;
 const PAGE_REFRESH_STORAGE_KEY = "fc25_page_refresh_minutes_v1";
 const DEFAULT_PAGE_REFRESH_MINUTES = 5;
 const LOW_DATA_MODE_KEY = "fc25_low_data_mode_v1";
-const PAGE_REFRESH_COUPON_STORAGE_KEY = "fc25_coupon_refresh_minutes_v1";
-const AUTO_COUPON_STORAGE_KEY = "fc25_auto_coupon_v1";
-const AUTO_COUPON_INTERVAL_KEY = "fc25_auto_coupon_interval_v1";
-const AUTO_COUPON_QUALITY_KEY = "fc25_auto_coupon_quality_v1";
-const AUTO_COUPON_TG_KEY = "fc25_auto_coupon_tg_v1";
-const ANTI_CORRELATION_KEY = "fc25_anti_correlation_v1";
-const ANTI_CHAOS_KEY = "fc25_anti_chaos_v1";
-const FREEZE_MINUTES_KEY = "fc25_freeze_minutes_v1";
-const BANKROLL_PROFILE_KEY = "fc25_bankroll_profile_v1";
-const LIVE_SIMULATION_KEY = "fc25_live_simulation_v1";
-const AUTO_HEAL_KEY = "fc25_auto_heal_v1";
-const PRE_SEND_LOCK_KEY = "fc25_pre_send_lock_v1";
-const COUPON_SIZE_KEY = "fc25_coupon_size_v1";
-const COUPON_LEAGUE_KEY = "fc25_coupon_league_v1";
-const COUPON_RISK_KEY = "fc25_coupon_risk_v1";
-const COUPON_STAKE_KEY = "fc25_coupon_stake_v1";
-const COUPON_BANKROLL_KEY = "fc25_coupon_bankroll_v1";
-const COUPON_START_ALERT_KEY = "fc25_coupon_start_alert_v1";
-const COUPON_DRIFT_KEY = "fc25_coupon_drift_v1";
-const COUPON_WATCH_DELTA_KEY = "fc25_coupon_watch_delta_v1";
 
 let radarChart = null;
 let flowChart = null;
@@ -71,138 +51,6 @@ function setLowDataMode(value) {
   lowDataEnabled = Boolean(value);
   localStorage.setItem(LOW_DATA_MODE_KEY, lowDataEnabled ? "1" : "0");
   document.body.classList.toggle("low-data", lowDataEnabled);
-}
-
-function getStoredNumber(key, fallback) {
-  const raw = Number(localStorage.getItem(key));
-  return Number.isFinite(raw) ? raw : fallback;
-}
-
-function setStoredNumber(key, value) {
-  const safe = Number(value);
-  if (!Number.isFinite(safe)) return;
-  localStorage.setItem(key, String(safe));
-}
-
-function getStoredString(key, fallback = "") {
-  const raw = localStorage.getItem(key);
-  return raw == null ? fallback : String(raw);
-}
-
-function setStoredString(key, value) {
-  if (value == null) return;
-  localStorage.setItem(key, String(value));
-}
-
-function syncSwitch(id, key, defaultValue = false) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  const stored = localStorage.getItem(key);
-  const checked =
-    stored == null ? defaultValue : stored === "1";
-  el.checked = checked;
-  el.addEventListener("change", () => {
-    localStorage.setItem(key, el.checked ? "1" : "0");
-  });
-}
-
-function syncSwitchDefaultOn(id, key) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  const stored = localStorage.getItem(key);
-  const checked = stored == null ? true : stored === "1";
-  el.checked = checked;
-  el.addEventListener("change", () => {
-    localStorage.setItem(key, el.checked ? "1" : "0");
-  });
-}
-
-function syncInputNumber(id, key, fallback) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.value = String(getStoredNumber(key, Number(el.value || fallback)));
-  el.addEventListener("change", () => setStoredNumber(key, el.value));
-}
-
-function syncInputString(id, key, fallback) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.value = getStoredString(key, String(el.value || fallback));
-  el.addEventListener("change", () => setStoredString(key, el.value));
-}
-
-function updateCouponLeagueOptions(currentLeague) {
-  const select = document.getElementById("leagueSelect");
-  if (!select) return;
-  const stored = getStoredString(COUPON_LEAGUE_KEY, "all");
-  select.innerHTML = '<option value="all">Toutes les ligues</option>';
-  if (currentLeague) {
-    const opt = document.createElement("option");
-    opt.value = currentLeague;
-    opt.textContent = currentLeague;
-    select.appendChild(opt);
-  }
-  select.value = Array.from(select.options).some((o) => o.value === stored) ? stored : "all";
-}
-
-function buildCouponActionUrl(action) {
-  const params = new URLSearchParams();
-  const size = document.getElementById("sizeInput")?.value;
-  const league = document.getElementById("leagueSelect")?.value;
-  const risk = document.getElementById("riskSelect")?.value;
-  const stake = document.getElementById("stakeInput")?.value;
-  const bankroll = document.getElementById("bankrollInput")?.value;
-  const startAlert = document.getElementById("startAlertInput")?.value;
-  const drift = document.getElementById("driftInput")?.value;
-  const watchDelta = document.getElementById("watchDeltaInput")?.value;
-
-  if (action && action !== "open") params.set("action", action);
-  if (size) params.set("size", size);
-  if (league) params.set("league", league);
-  if (risk) params.set("risk", risk);
-  if (stake) params.set("stake", stake);
-  if (bankroll) params.set("bankroll", bankroll);
-  if (startAlert) params.set("startAlert", startAlert);
-  if (drift) params.set("drift", drift);
-  if (watchDelta) params.set("watchDelta", watchDelta);
-  params.set("from", "match");
-  return `/coupon.html?${params.toString()}`;
-}
-
-function initCouponControlPanel() {
-  syncInputNumber("sizeInput", COUPON_SIZE_KEY, 3);
-  syncInputString("riskSelect", COUPON_RISK_KEY, "balanced");
-  syncInputNumber("stakeInput", COUPON_STAKE_KEY, 1000);
-  syncInputNumber("bankrollInput", COUPON_BANKROLL_KEY, 25000);
-  syncInputNumber("startAlertInput", COUPON_START_ALERT_KEY, 8);
-  syncInputNumber("driftInput", COUPON_DRIFT_KEY, 6);
-  syncInputNumber("watchDeltaInput", COUPON_WATCH_DELTA_KEY, 0.15);
-  syncInputNumber("refreshMinutesCouponInput", PAGE_REFRESH_COUPON_STORAGE_KEY, 5);
-  syncInputNumber("autoCouponIntervalInput", AUTO_COUPON_INTERVAL_KEY, 15);
-  syncInputNumber("autoCouponQualityInput", AUTO_COUPON_QUALITY_KEY, 72);
-  syncInputNumber("freezeMinutesInput", FREEZE_MINUTES_KEY, 3);
-  syncInputString("bankrollProfileSelect", BANKROLL_PROFILE_KEY, "standard");
-
-  syncSwitch("autoCouponSwitch", AUTO_COUPON_STORAGE_KEY, false);
-  syncSwitch("autoCouponTelegramSwitch", AUTO_COUPON_TG_KEY, false);
-  syncSwitchDefaultOn("antiCorrelationSwitch", ANTI_CORRELATION_KEY);
-  syncSwitchDefaultOn("antiChaosSwitch", ANTI_CHAOS_KEY);
-  syncSwitch("liveSimSwitch", LIVE_SIMULATION_KEY, false);
-  syncSwitch("autoHealSwitch", AUTO_HEAL_KEY, true);
-  syncSwitch("preSendLockSwitch", PRE_SEND_LOCK_KEY, true);
-  syncSwitch("lowDataSwitch", LOW_DATA_MODE_KEY, false);
-
-  const leagueSelect = document.getElementById("leagueSelect");
-  if (leagueSelect) {
-    leagueSelect.addEventListener("change", () => setStoredString(COUPON_LEAGUE_KEY, leagueSelect.value));
-  }
-
-  document.querySelectorAll(".coupon-action-btn").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const action = btn.getAttribute("data-action") || "open";
-      window.open(buildCouponActionUrl(action), "_blank");
-    });
-  });
 }
 
 function updateRefreshBadge() {
@@ -954,7 +802,6 @@ async function loadData(trigger = "manual") {
     setMatchTelegramButtonEnabled(true);
     document.getElementById("title").textContent = `${match.teamHome} vs ${match.teamAway}`;
     document.getElementById("sub").textContent = `${match.league} | marche(s): ${data.bettingMarkets?.length || 0}${trigger === "auto" ? " | mise a jour auto" : ""}`;
-    updateCouponLeagueOptions(match.league);
 
     renderMaster(data.prediction?.maitre?.decision_finale || {}, data.prediction?.maitre?.analyse_bots || {});
     renderCoachPanel(data);
@@ -1021,7 +868,6 @@ function init() {
   } else {
     setLowDataMode(isLowDataModeEnabled());
   }
-  initCouponControlPanel();
   setMatchTelegramButtonEnabled(false);
   if ("Notification" in window && Notification.permission === "default") {
     try {

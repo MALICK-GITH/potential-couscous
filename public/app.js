@@ -160,6 +160,193 @@ function computeReliabilityScore(match) {
   return Math.round(clamp(raw, 10, 99));
 }
 
+function oddsValueScore(odds1x2) {
+  const h = Number(odds1x2?.home);
+  const d = Number(odds1x2?.draw);
+  const a = Number(odds1x2?.away);
+  if (!(h > 0 && d > 0 && a > 0)) return 50;
+  const inv = 1 / h + 1 / d + 1 / a;
+  const margin = inv - 1;
+  return clamp(100 - (margin / 0.15) * 100, 0, 100);
+}
+
+function depthScoreFromBets(betsCount) {
+  const b = Number(betsCount || 0);
+  if (b >= 80) return 100;
+  if (b >= 50) return 85;
+  if (b >= 30) return 70;
+  if (b >= 15) return 55;
+  return 35;
+}
+
+function stabilityFromTrend(trend) {
+  const n = ["home", "draw", "away"].filter((k) => trend?.[k]).length;
+  if (n === 0) return 100;
+  if (n === 1) return 75;
+  if (n === 2) return 45;
+  return 25;
+}
+
+function timingScoreForFinder(match) {
+  const nowSec = Math.floor(Date.now() / 1000);
+  const start = Number(match?.startTimeUnix || 0);
+  const mins = start > nowSec ? (start - nowSec) / 60 : -1;
+  if (mins < 0) return 40;
+  if (mins <= 8) return 92;
+  if (mins <= 45) return 100;
+  if (mins <= 120) return 86;
+  return 62;
+}
+
+function computeFinderScore(match) {
+  const rel = clamp(Number(match.reliabilityScore || 0), 0, 100);
+  const value = oddsValueScore(match?.odds1x2);
+  const depth = depthScoreFromBets(match?.betsCount);
+  const stab = stabilityFromTrend(match?.trend);
+  const time = timingScoreForFinder(match);
+  const raw = rel * 0.35 + value * 0.25 + depth * 0.15 + stab * 0.15 + time * 0.1;
+  return Math.round(clamp(raw, 12, 100));
+}
+
+function minutesToStart(match) {
+  const nowSec = Math.floor(Date.now() / 1000);
+  const start = Number(match?.startTimeUnix || 0);
+  return start > nowSec ? (start - nowSec) / 60 : -1;
+}
+
+function maxImpliedFavoritePercent(match) {
+  const h = Number(match?.odds1x2?.home);
+  const d = Number(match?.odds1x2?.draw);
+  const a = Number(match?.odds1x2?.away);
+  if (!(h > 0 && d > 0 && a > 0)) return null;
+  const ih = 1 / h;
+  const id = 1 / d;
+  const ia = 1 / a;
+  const sum = ih + id + ia;
+  if (sum <= 0) return null;
+  return Math.round((Math.max(ih, id, ia) / sum) * 100);
+}
+
+function estimatedSuccessProbability(match) {
+  const finder = clamp(Number(match.finderScore || 0), 0, 100);
+  const market = maxImpliedFavoritePercent(match);
+  if (market == null) return Math.round(finder);
+  return Math.round(clamp(0.38 * market + 0.62 * finder, 22, 93));
+}
+
+const DENICHEUR_TARGET_MIN = 10;
+const DENICHEUR_WINDOW_MIN = 5;
+
+function pickDenicheurMatch(matches) {
+  const upcoming = (matches || []).filter((m) => classifyMatch(m) === "upcoming");
+  const strict = upcoming.filter((m) => {
+    const mt = minutesToStart(m);
+    return mt >= DENICHEUR_TARGET_MIN - DENICHEUR_WINDOW_MIN && mt <= DENICHEUR_TARGET_MIN + DENICHEUR_WINDOW_MIN;
+  });
+  let pool = strict;
+  let searchNote = "Fenetre cible: ~10 min apres coup d'envoi (entre 5 et 15 min).";
+  if (!pool.length) {
+    pool = upcoming.filter((m) => {
+      const mt = minutesToStart(m);
+      return mt >= 4 && mt <= 25;
+    });
+    searchNote = "Aucun match dans 5-15 min: recherche elargie entre 4 et 25 min.";
+  }
+  if (!pool.length) {
+    pool = upcoming.filter((m) => {
+      const mt = minutesToStart(m);
+      return mt > 0 && mt <= 180;
+    });
+    searchNote = "Aucun match proche: meilleur choix parmi les matchs a venir sous 3 h.";
+  }
+  if (!pool.length) {
+    return { match: null, searchNote: "Aucun match a venir disponible." };
+  }
+  const best = [...pool].sort((a, b) => Number(b.finderScore || 0) - Number(a.finderScore || 0))[0];
+  return { match: best, searchNote };
+}
+
+function renderDenicheurModalContent(match, searchNote) {
+  const mt = Math.round(minutesToStart(match));
+  const prob = estimatedSuccessProbability(match);
+  const taux = Math.round(clamp(Number(match.finderScore || 0), 0, 100));
+  const rel = Math.round(clamp(Number(match.reliabilityScore || 0), 0, 99));
+  const marketHint = maxImpliedFavoritePercent(match);
+  const detailUrl = `/match.html?id=${encodeURIComponent(match.id)}`;
+
+  return `
+    <p class="denicheur-intro">Voici le match que le <strong>denicheur</strong> a choisi pour toi.</p>
+    <p class="denicheur-search-note">${escapeHtml(searchNote)}</p>
+    <div class="denicheur-match-block">
+      <p class="denicheur-league">${escapeHtml(match.league || "Ligue")}</p>
+      <p class="denicheur-teams">${escapeHtml(match.teamHome)} <span class="denicheur-vs">vs</span> ${escapeHtml(match.teamAway)}</p>
+      <p class="denicheur-kick">Coup d'envoi: ${formatTime(match.startTimeUnix)} · dans environ <strong>${mt}</strong> min</p>
+      <div class="denicheur-odds-mini">
+        <span>1 ${formatOdd(match.odds1x2?.home)}</span>
+        <span>X ${formatOdd(match.odds1x2?.draw)}</span>
+        <span>2 ${formatOdd(match.odds1x2?.away)}</span>
+      </div>
+    </div>
+    <div class="denicheur-metrics">
+      <div class="denicheur-metric">
+        <span class="denicheur-metric-label">Probabilite de succes estimee</span>
+        <strong class="denicheur-metric-value">${prob}%</strong>
+        <small class="denicheur-metric-hint">Combine marche (favori ~${marketHint != null ? `${marketHint}%` : "N/A"}) et score denicheur.</small>
+      </div>
+      <div class="denicheur-metric">
+        <span class="denicheur-metric-label">Taux de succes / confiance denicheur</span>
+        <strong class="denicheur-metric-value denicheur-accent">${taux}%</strong>
+        <small class="denicheur-metric-hint">Indice de qualite du pick (fiabilite donnees ${rel}%).</small>
+      </div>
+    </div>
+    <p class="denicheur-disclaimer">Indicatif, pari responsable — rien n'est garanti.</p>
+    <a class="denicheur-detail-btn" href="${detailUrl}">Voir le detail predictions</a>
+  `;
+}
+
+async function openDenicheurModal() {
+  const modal = document.getElementById("denicheurModal");
+  const body = document.getElementById("denicheurModalBody");
+  if (!modal || !body) return;
+  modal.classList.remove("hidden");
+  modal.setAttribute("aria-hidden", "false");
+  body.innerHTML = '<p class="denicheur-loading">Recherche en cours...</p>';
+
+  try {
+    await loadMatches();
+  } catch (error) {
+    body.innerHTML = `<p class="denicheur-error">Impossible de charger les matchs: ${escapeHtml(error.message)}</p>`;
+    return;
+  }
+
+  const { match, searchNote } = pickDenicheurMatch(allMatches);
+  if (!match) {
+    body.innerHTML = `<p class="denicheur-error">${escapeHtml(searchNote)} Actualise la page ou reessaie plus tard.</p>`;
+    return;
+  }
+  body.innerHTML = renderDenicheurModalContent(match, searchNote);
+}
+
+function initDenicheurModal() {
+  const modal = document.getElementById("denicheurModal");
+  const btn = document.getElementById("denicheurLaunchBtn");
+  const closeBtn = document.getElementById("denicheurModalClose");
+  if (!modal || !btn) return;
+
+  const close = () => {
+    modal.classList.add("hidden");
+    modal.setAttribute("aria-hidden", "true");
+  };
+
+  btn.addEventListener("click", () => {
+    openDenicheurModal();
+  });
+  if (closeBtn) closeBtn.addEventListener("click", close);
+  modal.addEventListener("click", (event) => {
+    if (event.target === modal) close();
+  });
+}
+
 function uniqueLeagues(matches) {
   const map = new Map();
   matches.forEach((match) => {
@@ -232,7 +419,9 @@ function createMatchCard(match, index) {
   card.style.animationDelay = `${Math.min(index * 0.04, 0.6)}s`;
   const score = extractScore(match.score);
   const status = match.statusText || "A venir";
-  const quality = Number(match.reliabilityScore || 0);
+  const useFinder = currentMatchMode === "finder" && Number(match.finderScore || 0) > 0;
+  const quality = useFinder ? Number(match.finderScore || 0) : Number(match.reliabilityScore || 0);
+  const qualityLabel = useFinder ? "Denicheur" : "Qualite";
   const qualityClass = quality >= 75 ? "quality-high" : quality >= 60 ? "quality-mid" : "quality-low";
 
   const detailLink = document.createElement("a");
@@ -244,7 +433,7 @@ function createMatchCard(match, index) {
     <div class="league-row">
       <p class="league">${match.league || "Ligue virtuelle"}</p>
       <div class="league-badges">
-        <span class="reliability-pill ${qualityClass}">Qualite ${quality}%</span>
+        <span class="reliability-pill ${qualityClass}">${qualityLabel} ${quality}%</span>
         <span class="status-pill">${status}</span>
       </div>
     </div>
@@ -350,11 +539,15 @@ function enrichWithTrend(matches) {
       draw: diffTrend(prev.draw, next.draw),
       away: diffTrend(prev.away, next.away),
     };
-    return {
+    const enriched = {
       ...match,
       trend,
       fetchedAt: lastFetchedAt,
       reliabilityScore: computeReliabilityScore({ ...match, trend, fetchedAt: lastFetchedAt }),
+    };
+    return {
+      ...enriched,
+      finderScore: computeFinderScore(enriched),
     };
   });
   if (alerts.length) {
@@ -421,6 +614,47 @@ function renderLeagueHeatmap(matches) {
   `;
 }
 
+function renderMatchFinder(matches) {
+  const grid = document.getElementById("finderGrid");
+  const badge = document.getElementById("finderBadge");
+  if (!grid) return;
+
+  const upcoming = (matches || []).filter((m) => classifyMatch(m) === "upcoming");
+  const sorted = [...upcoming].sort((a, b) => {
+    const fa = Number(a.finderScore || 0);
+    const fb = Number(b.finderScore || 0);
+    if (fb !== fa) return fb - fa;
+    return Number(a.startTimeUnix || 0) - Number(b.startTimeUnix || 0);
+  });
+  const top = sorted.slice(0, 6);
+
+  if (badge) {
+    badge.textContent = top.length ? `${top.length} pepite(s)` : "Aucune pepite";
+  }
+
+  if (!top.length) {
+    grid.innerHTML = `<p class="finder-empty">Aucun match a venir pour le denicheur pour le moment.</p>`;
+    return;
+  }
+
+  grid.innerHTML = top
+    .map((m, i) => {
+      const score = Number(m.finderScore || 0);
+      const sc = score >= 75 ? "finder-high" : score >= 60 ? "finder-mid" : "finder-low";
+      return `
+      <article class="finder-row">
+        <span class="finder-rank">#${i + 1}</span>
+        <div class="finder-main">
+          <strong>${escapeHtml(m.teamHome)} vs ${escapeHtml(m.teamAway)}</strong>
+          <small>${escapeHtml(m.league || "Ligue")} · ${formatTime(m.startTimeUnix)}</small>
+        </div>
+        <span class="finder-pill ${sc}">${score}</span>
+        <a class="finder-link" href="/match.html?id=${encodeURIComponent(m.id)}">Detail</a>
+      </article>`;
+    })
+    .join("");
+}
+
 function renderMatches() {
   const subTitle = document.getElementById("subTitle");
   const matchesWrap = document.getElementById("matches");
@@ -432,18 +666,30 @@ function renderMatches() {
     selectedLeague === "all"
       ? allMatches
       : allMatches.filter((match) => match.league === selectedLeague);
-  const filtered =
-    currentMatchMode === "turbo"
-      ? byLeague
-          .filter((match) => classifyMatch(match) === "upcoming")
-          .sort((a, b) => {
-            const ra = Number(a.reliabilityScore || 0);
-            const rb = Number(b.reliabilityScore || 0);
-            if (rb !== ra) return rb - ra;
-            return Number(a.startTimeUnix || 0) - Number(b.startTimeUnix || 0);
-          })
-          .slice(0, 10)
-      : byLeague.filter((match) => classifyMatch(match) === currentMatchMode);
+
+  let filtered;
+  if (currentMatchMode === "turbo") {
+    filtered = byLeague
+      .filter((match) => classifyMatch(match) === "upcoming")
+      .sort((a, b) => {
+        const ra = Number(a.reliabilityScore || 0);
+        const rb = Number(b.reliabilityScore || 0);
+        if (rb !== ra) return rb - ra;
+        return Number(a.startTimeUnix || 0) - Number(b.startTimeUnix || 0);
+      })
+      .slice(0, 10);
+  } else if (currentMatchMode === "finder") {
+    filtered = byLeague
+      .filter((match) => classifyMatch(match) === "upcoming")
+      .sort((a, b) => {
+        const fa = Number(a.finderScore || 0);
+        const fb = Number(b.finderScore || 0);
+        if (fb !== fa) return fb - fa;
+        return Number(a.startTimeUnix || 0) - Number(b.startTimeUnix || 0);
+      });
+  } else {
+    filtered = byLeague.filter((match) => classifyMatch(match) === currentMatchMode);
+  }
 
   const leagueLabel = selectedLeague === "all" ? "toutes ligues" : `ligue: ${selectedLeague}`;
   const modeLabel =
@@ -451,6 +697,8 @@ function renderMatches() {
       ? "A venir"
       : currentMatchMode === "turbo"
       ? "Turbo Top 10"
+      : currentMatchMode === "finder"
+      ? "Denicheur"
       : currentMatchMode === "live"
       ? "En cours"
       : "Termines";
@@ -503,6 +751,7 @@ async function loadMatches() {
 
     populateLeagueFilter(allMatches);
     renderLeagueHeatmap(allMatches);
+    renderMatchFinder(allMatches);
     renderMatches();
     updatedAt.textContent = `Derniere mise a jour: ${new Date(data.fetchedAt).toLocaleString("fr-FR")}`;
   } catch (error) {
@@ -539,6 +788,7 @@ setInterval(() => {
   if (wrap) activateAmbientOddsPulse(wrap);
 }, 2300);
 initWelcomeModal();
+initDenicheurModal();
 
 function registerHomeSiteControl() {
   window.SiteControl = {
@@ -549,8 +799,10 @@ function registerHomeSiteControl() {
       "set_mode_live",
       "set_mode_finished",
       "set_mode_turbo",
+      "set_mode_finder",
       "set_league",
       "open_coupon_page",
+      "open_denicheur_modal",
       "open_match_first",
       "set_low_data",
     ],
@@ -581,6 +833,12 @@ function registerHomeSiteControl() {
         renderMatches();
         return true;
       }
+      if (action === "set_mode_finder") {
+        currentMatchMode = "finder";
+        document.querySelectorAll(".match-mode").forEach((b) => b.classList.toggle("active", b.dataset.mode === "finder"));
+        renderMatches();
+        return true;
+      }
       if (action === "set_league") {
         const select = document.getElementById("leagueSelect");
         const league = String(payload?.league || payload?.value || "all");
@@ -594,6 +852,10 @@ function registerHomeSiteControl() {
       }
       if (action === "open_coupon_page") {
         window.location.href = "/coupon.html";
+        return true;
+      }
+      if (action === "open_denicheur_modal") {
+        openDenicheurModal();
         return true;
       }
       if (action === "open_match_first") {
