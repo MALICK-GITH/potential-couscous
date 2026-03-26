@@ -29,8 +29,8 @@
         <p class="tag">Guide Officiel</p>
         <h1>Mode d'emploi complet</h1>
         <p class="subtitle">
-          Toutes les astuces pour utiliser le site sans erreur: matchs, details, coupon, image, PDF, Telegram et gestion des
-          problemes.
+          Guide a jour: denicheur modale, liste denicheur, modes de liste, detail match, coupon, exports, Telegram, limites API
+          et pari responsable.
         </p>
       </section>
 
@@ -39,7 +39,11 @@
         <div class="grid">
           <article class="mini">
             <h3>Etape A</h3>
-            <p>Ouvre la page d'accueil, choisis une <strong>ligue</strong>, puis un mode: <strong>A venir</strong>, <strong>Turbo Top 10</strong>, <strong>En cours</strong>.</p>
+            <p>
+              Ouvre la page d'accueil. Tu peux lancer le <strong>denicheur</strong> (bouton vert) pour un match ~10 min, puis
+              filtrer une <strong>ligue</strong> et un mode: <strong>A venir</strong>, <strong>Turbo Top 10</strong>,
+              <strong>Denicheur</strong> (liste), <strong>En cours</strong>.
+            </p>
           </article>
           <article class="mini">
             <h3>Etape B</h3>
@@ -53,7 +57,32 @@
       </section>
 
       <section class="panel">
-        <h2>2. Comprendre les modes</h2>
+        <h2>2. Denicheur (bouton sur l'accueil)</h2>
+        <p>
+          Clique sur <strong>Lancer le denicheur (match ~10 min)</strong> sous le titre. Le site recharge les matchs puis
+          cherche un match <strong>a venir</strong> dont le coup d'envoi tombe dans une fenetre d'environ
+          <strong>10 minutes</strong> (entre 5 et 15 min). Si vide, la recherche s'elargit puis on garde le meilleur
+          <strong>score denicheur</strong>.
+        </p>
+        <ul>
+          <li>
+            <strong>Fenetre modale:</strong> methode <strong>prudente</strong> (priorite fiabilite + cotes stables), ligue, equipes, cotes 1X2,
+            <strong>probabilite conservatrice</strong> (marge bookmaker) et <strong>confiance prudente</strong> (pas un score agressif).
+          </li>
+          <li><strong>Memoire locale:</strong> les 3 derniers choix sont stockes sur ton navigateur pour ton suivi perso.</li>
+          <li><strong>Accessibilite:</strong> <code>Echap</code> ferme la modale; <code>Tab</code> boucle dans la fenetre.</li>
+          <li><strong>Recherche:</strong> le bouton est desactive pendant le chargement pour eviter les doubles clics.</li>
+          <li>
+            <strong>Option complete — choisir au mieux:</strong> case a cocher sous le bouton. Filtres ultra stricts (liquidite,
+            fiabilite elevee, aucun mouvement sur 1X2). Si rien ne convient, le denicheur n'affiche aucun match — decoche pour
+            revenir au mode prudent.
+          </li>
+        </ul>
+        <p><em>Indicatif uniquement — reserve aux majeurs, pari responsable, aucun gain garanti.</em></p>
+      </section>
+
+      <section class="panel">
+        <h2>3. Comprendre les modes</h2>
         <p>
           <span class="badge">A venir</span>
           Matchs pre-match, ideal pour coupons propres.
@@ -61,6 +90,10 @@
         <p>
           <span class="badge">Turbo Top 10</span>
           Les meilleurs pre-matchs classes par fiabilite.
+        </p>
+        <p>
+          <span class="badge">Denicheur</span>
+          Tous les matchs a venir tries par score denicheur (liste sous la heatmap).
         </p>
         <p>
           <span class="badge">En cours</span>
@@ -73,7 +106,7 @@
       </section>
 
       <section class="panel">
-        <h2>3. Page detail match</h2>
+        <h2>4. Page detail match</h2>
         <ul>
           <li><strong>Neural Match Engine:</strong> radar + flux dynamique + KPI.</li>
           <li><strong>Validation locale:</strong> aide a voir si le pick reste propre.</li>
@@ -83,7 +116,7 @@
       </section>
 
       <section class="panel">
-        <h2>4. Page coupon (toutes les options)</h2>
+        <h2>5. Page coupon (toutes les options)</h2>
         <div class="grid">
           <article class="mini">
             <h3>Generation</h3>
@@ -114,7 +147,7 @@
       </section>
 
       <section class="panel">
-        <h2>5. Telegram (texte, image, pack)</h2>
+        <h2>6. Telegram (texte, image, pack)</h2>
         <ul>
           <li><strong>Envoyer Telegram:</strong> envoi texte.</li>
           <li><strong>Telegram Image:</strong> envoi image coupon lisible.</li>
@@ -124,7 +157,7 @@
       </section>
 
       <section class="panel">
-        <h2>6. Parametres recommandes (propre)</h2>
+        <h2>7. Parametres recommandes (propre)</h2>
         <div class="code">Profil: Equilibre
 Nombre de matchs: 2 a 4
 Seuil drift: 5% a 7%
@@ -133,18 +166,21 @@ Toujours: Valider Ticket Pro avant envoi/export</div>
       </section>
 
       <section class="panel">
-        <h2>7. Resolution des erreurs frequentes</h2>
+        <h2>8. Resolution des erreurs frequentes</h2>
         <ul>
           <li><strong>Route API introuvable:</strong> redemarre le serveur puis recharge la page en dur (<code>Ctrl+F5</code>).</li>
-          <li><strong>Erreur JSON/HTML:</strong> ancien frontend cache, fais un hard refresh.</li>
+          <li><strong>Erreur JSON/HTML:</strong> ancien frontend cache (service worker), fais un hard refresh ou vide le cache du site.</li>
+          <li><strong>Variables serveur:</strong> copie <code>.env.example</code> vers <code>.env</code> puis renseigne les cles (Telegram, Anthropic, etc.).</li>
+          <li><strong>Surveillance:</strong> le serveur expose <code>GET /health</code> (JSON: uptime) pour hebergement et monitoring.</li>
           <li><strong>Match deja demarre:</strong> retire le pick ou regenere en mode A venir.</li>
           <li><strong>Telegram echec:</strong> verifie <code>TELEGRAM_BOT_TOKEN</code> et qu'un chat existe avec le bot.</li>
+          <li><strong>Trop de requetes (429):</strong> le serveur limite les envois Telegram / PDF / images par minute — patiente.</li>
           <li><strong>Bouton grise:</strong> genere d'abord un coupon non vide.</li>
         </ul>
       </section>
 
       <section class="panel">
-        <h2>8. Bonnes pratiques de discipline</h2>
+        <h2>9. Bonnes pratiques de discipline</h2>
         <ul>
           <li>Ne jamais forcer un coupon si la validation demande correction.</li>
           <li>Eviter les coupons trop longs; preferer qualite a quantite.</li>
@@ -154,14 +190,15 @@ Toujours: Valider Ticket Pro avant envoi/export</div>
       </section>
 
       <section class="panel">
-        <h2>9. FAQ rapide</h2>
+        <h2>10. FAQ rapide</h2>
         <p><strong>Q:</strong> Pourquoi je ne vois pas certains matchs ?<br /><strong>R:</strong> Filtre ligue/mode actif, ou match pas dans le flux courant.</p>
         <p><strong>Q:</strong> Pourquoi un pick est remplace ?<br /><strong>R:</strong> Ticket Shield detecte un risque (drift, marche indisponible, faible confiance, match demarre).</p>
         <p><strong>Q:</strong> Je veux partager vite ?<br /><strong>R:</strong> Utilise <strong>Envoi Groupe 1-Clic</strong>.</p>
+        <p><strong>Q:</strong> Le denicheur ne propose rien ?<br /><strong>R:</strong> Actualise les matchs; fenetre horaire vide; ou <strong>option complete</strong> activee sans match assez propre — decoche l'option ou reessaie plus tard.</p>
       </section>
 
       <section class="panel">
-        <h2>10. Captures reelles de l'interface</h2>
+        <h2>11. Captures reelles de l'interface</h2>
         <p>Ces apercus sont en direct depuis le site, pour voir l'affichage reel sur chaque page.</p>
         <div class="capture-grid">
           <article class="capture-card">
@@ -189,7 +226,7 @@ Toujours: Valider Ticket Pro avant envoi/export</div>
       </section>
 
       <section class="panel">
-        <h2>11. Contact Support</h2>
+        <h2>12. Contact Support</h2>
         <p>Besoin d'aide immediate ? Utilise un des canaux ci-dessous.</p>
         <div class="grid">
           <article class="mini">
@@ -205,7 +242,12 @@ Toujours: Valider Ticket Pro avant envoi/export</div>
         </div>
       </section>
 
-      <footer class="site-signature">Signe par <strong>SOLITAIRE HACK</strong></footer>
+      <footer class="site-signature">
+        <p class="legal-foot">
+          Informations indicatives. Paris interdits aux mineurs. Joue avec moderation.
+        </p>
+        Signe par <strong>SOLITAIRE HACK</strong>
+      </footer>
     </main>
     <script src="/mode-emploi.js" defer></script>
     <script src="/chat-widget.js" defer></script>

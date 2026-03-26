@@ -8,6 +8,37 @@ const oddAlertLastShown = new Map();
 const LOW_DATA_MODE_KEY = "fc25_low_data_mode_v1";
 let lastFetchedAt = null;
 const WELCOME_MODAL_KEY = "fc25_welcome_modal_v1";
+const DENICHEUR_HISTORY_KEY = "fc25_denicheur_history_v1";
+const DENICHEUR_FULL_OPTION_KEY = "fc25_denicheur_full_option_v1";
+let denicheurPreviousFocus = null;
+let denicheurBodyScrollY = 0;
+
+function shouldLockDenicheurScroll() {
+  return window.matchMedia("(max-width: 640px)").matches;
+}
+
+function lockDenicheurBackgroundScroll() {
+  if (!shouldLockDenicheurScroll()) return;
+  if (document.body.classList.contains("denicheur-scroll-locked")) return;
+  denicheurBodyScrollY = window.scrollY || window.pageYOffset || 0;
+  document.body.classList.add("denicheur-scroll-locked");
+  document.body.style.position = "fixed";
+  document.body.style.top = `-${denicheurBodyScrollY}px`;
+  document.body.style.left = "0";
+  document.body.style.right = "0";
+  document.body.style.width = "100%";
+}
+
+function unlockDenicheurBackgroundScroll() {
+  if (!document.body.classList.contains("denicheur-scroll-locked")) return;
+  document.body.classList.remove("denicheur-scroll-locked");
+  document.body.style.position = "";
+  document.body.style.top = "";
+  document.body.style.left = "";
+  document.body.style.right = "";
+  document.body.style.width = "";
+  window.scrollTo(0, denicheurBodyScrollY);
+}
 
 function formatTime(unixSeconds) {
   if (!unixSeconds) return "Heure non disponible";
@@ -192,10 +223,14 @@ function timingScoreForFinder(match) {
   const start = Number(match?.startTimeUnix || 0);
   const mins = start > nowSec ? (start - nowSec) / 60 : -1;
   if (mins < 0) return 40;
-  if (mins <= 8) return 92;
-  if (mins <= 45) return 100;
-  if (mins <= 120) return 86;
-  return 62;
+  if (mins <= 8) return 88;
+  if (mins <= 45) return 96;
+  if (mins <= 120) return 80;
+  return 58;
+}
+
+function trendFlagCount(match) {
+  return ["home", "draw", "away"].filter((k) => match?.trend?.[k]).length;
 }
 
 function computeFinderScore(match) {
@@ -204,8 +239,23 @@ function computeFinderScore(match) {
   const depth = depthScoreFromBets(match?.betsCount);
   const stab = stabilityFromTrend(match?.trend);
   const time = timingScoreForFinder(match);
-  const raw = rel * 0.35 + value * 0.25 + depth * 0.15 + stab * 0.15 + time * 0.1;
+  const n = trendFlagCount(match);
+  const raw = rel * 0.5 + stab * 0.22 + depth * 0.14 + value * 0.08 + time * 0.06 - n * 7;
   return Math.round(clamp(raw, 12, 100));
+}
+
+function conservativeDenicheurRank(match) {
+  const rel = Number(match.reliabilityScore || 0);
+  const fin = Number(match.finderScore || 0);
+  const n = trendFlagCount(match);
+  return rel * 0.52 + fin * 0.4 - n * 11 - (n >= 2 ? 14 : 0);
+}
+
+function prudentDenicheurScore(match) {
+  const rel = Number(match.reliabilityScore || 0);
+  const fin = Number(match.finderScore || 0);
+  const n = trendFlagCount(match);
+  return Math.round(clamp(rel * 0.5 + fin * 0.35 - n * 8, 12, 88));
 }
 
 function minutesToStart(match) {
@@ -230,14 +280,111 @@ function maxImpliedFavoritePercent(match) {
 function estimatedSuccessProbability(match) {
   const finder = clamp(Number(match.finderScore || 0), 0, 100);
   const market = maxImpliedFavoritePercent(match);
-  if (market == null) return Math.round(finder);
-  return Math.round(clamp(0.38 * market + 0.62 * finder, 22, 93));
+  const n = trendFlagCount(match);
+  const marginHaircut = 0.84;
+  if (market == null) {
+    return Math.round(clamp(finder * 0.55 - 10 - n * 5, 5, 55));
+  }
+  const adjM = market * marginHaircut;
+  const raw = 0.16 * adjM + 0.34 * finder - n * 5 - 12;
+  return Math.round(clamp(raw, 4, 58));
 }
 
 const DENICHEUR_TARGET_MIN = 10;
 const DENICHEUR_WINDOW_MIN = 5;
 
+function isDenicheurFullOption() {
+  const el = document.getElementById("denicheurFullOption");
+  return Boolean(el?.checked);
+}
+
+function initDenicheurFullOption() {
+  const el = document.getElementById("denicheurFullOption");
+  if (!el) return;
+  const stored = localStorage.getItem(DENICHEUR_FULL_OPTION_KEY);
+  if (stored === "1") el.checked = true;
+  el.addEventListener("change", () => {
+    localStorage.setItem(DENICHEUR_FULL_OPTION_KEY, el.checked ? "1" : "0");
+  });
+}
+
+function refineDenicheurCandidatePool(pool, baseNote, fullMode) {
+  const withOdds = pool.filter((m) => maxImpliedFavoritePercent(m) != null);
+  const work = withOdds.length ? withOdds : pool;
+  let searchNote = baseNote;
+
+  if (fullMode) {
+    searchNote += " Option complete (choisir au mieux): criteres renforces.";
+    const depthOk = (m) => Number(m.betsCount || 0) >= 22;
+    let filtered = work.filter(
+      (m) =>
+        trendFlagCount(m) === 0 &&
+        depthOk(m) &&
+        Number(m.reliabilityScore || 0) >= 72 &&
+        Number(m.finderScore || 0) >= 62
+    );
+    if (filtered.length) {
+      searchNote += " Niveau max: liquidite + fiabilite + cotes figees.";
+      return { pool: filtered, searchNote };
+    }
+    filtered = work.filter(
+      (m) =>
+        trendFlagCount(m) === 0 &&
+        depthOk(m) &&
+        Number(m.reliabilityScore || 0) >= 68 &&
+        Number(m.finderScore || 0) >= 58
+    );
+    if (filtered.length) {
+      searchNote += " Niveau eleve: marche solide sans mouvement sur 1X2.";
+      return { pool: filtered, searchNote };
+    }
+    filtered = work.filter(
+      (m) =>
+        trendFlagCount(m) === 0 &&
+        Number(m.reliabilityScore || 0) >= 66 &&
+        Number(m.finderScore || 0) >= 56 &&
+        Number(m.betsCount || 0) >= 15
+    );
+    if (filtered.length) {
+      searchNote += " Niveau renforce: minimum de profondeur et tres bonne fiabilite.";
+      return { pool: filtered, searchNote };
+    }
+    searchNote +=
+      " Aucun match ne valide l'option complete sur cette fenetre — decoche l'option ou actualise plus tard.";
+    return { pool: [], searchNote };
+  }
+
+  let filtered = work.filter(
+    (m) =>
+      trendFlagCount(m) === 0 &&
+      Number(m.reliabilityScore || 0) >= 65 &&
+      Number(m.finderScore || 0) >= 56
+  );
+  if (filtered.length) {
+    searchNote += " Mode strict: cotes stables + bonne fiabilite.";
+    return { pool: filtered, searchNote };
+  }
+  filtered = work.filter(
+    (m) =>
+      trendFlagCount(m) <= 1 &&
+      Number(m.reliabilityScore || 0) >= 58 &&
+      Number(m.finderScore || 0) >= 52
+  );
+  if (filtered.length) {
+    searchNote += " Mode prudent: peu de mouvement sur les cotes.";
+    return { pool: filtered, searchNote };
+  }
+  filtered = work.filter((m) => trendFlagCount(m) <= 2);
+  if (filtered.length) {
+    searchNote += " Moins de choix tres propres: niveau intermediaire.";
+    return { pool: filtered, searchNote };
+  }
+  searchNote += " Attention: marche volatile — reste tres prudent.";
+  return { pool: work, searchNote };
+}
+
 function pickDenicheurMatch(matches) {
+  const fullMode = isDenicheurFullOption();
   const upcoming = (matches || []).filter((m) => classifyMatch(m) === "upcoming");
   const strict = upcoming.filter((m) => {
     const mt = minutesToStart(m);
@@ -262,20 +409,118 @@ function pickDenicheurMatch(matches) {
   if (!pool.length) {
     return { match: null, searchNote: "Aucun match a venir disponible." };
   }
-  const best = [...pool].sort((a, b) => Number(b.finderScore || 0) - Number(a.finderScore || 0))[0];
-  return { match: best, searchNote };
+  const refined = refineDenicheurCandidatePool(pool, searchNote, fullMode);
+  if (!refined.pool.length) {
+    return { match: null, searchNote: refined.searchNote };
+  }
+  const sorted = [...refined.pool].sort((a, b) => {
+    const ra = conservativeDenicheurRank(a) + (fullMode ? Number(a.reliabilityScore || 0) * 0.05 : 0);
+    const rb = conservativeDenicheurRank(b) + (fullMode ? Number(b.reliabilityScore || 0) * 0.05 : 0);
+    if (rb !== ra) return rb - ra;
+    return Number(a.startTimeUnix || 0) - Number(b.startTimeUnix || 0);
+  });
+  return { match: sorted[0], searchNote: refined.searchNote };
+}
+
+function pushDenicheurHistory(entry) {
+  try {
+    const raw = localStorage.getItem(DENICHEUR_HISTORY_KEY);
+    let list = [];
+    try {
+      const parsed = JSON.parse(raw || "[]");
+      if (Array.isArray(parsed)) list = parsed;
+    } catch {
+      list = [];
+    }
+    list.unshift({
+      id: entry.id,
+      teamHome: entry.teamHome,
+      teamAway: entry.teamAway,
+      prob: entry.prob,
+      taux: entry.taux,
+      at: Date.now(),
+    });
+    localStorage.setItem(DENICHEUR_HISTORY_KEY, JSON.stringify(list.slice(0, 3)));
+  } catch {}
+}
+
+function renderDenicheurHistoryHtml() {
+  try {
+    const raw = localStorage.getItem(DENICHEUR_HISTORY_KEY);
+    const list = JSON.parse(raw || "[]");
+    if (!Array.isArray(list) || list.length === 0) return "";
+    const rows = list.slice(0, 3).map((h) => {
+      const t = h.at
+        ? new Date(h.at).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })
+        : "";
+      return `<li><span class="denicheur-hist-teams">${escapeHtml(h.teamHome)} vs ${escapeHtml(h.teamAway)}</span> — proba ${h.prob}% / confiance ${h.taux}% <small>${t}</small></li>`;
+    });
+    return `
+      <div class="denicheur-history">
+        <h3 class="denicheur-history-title">Derniers choix (memoire locale)</h3>
+        <ul class="denicheur-history-list">${rows.join("")}</ul>
+      </div>`;
+  } catch {
+    return "";
+  }
+}
+
+function getFocusableElements(root) {
+  if (!root) return [];
+  return Array.from(
+    root.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
+  ).filter((el) => !el.hasAttribute("disabled") && el.offsetParent !== null);
+}
+
+function setDenicheurModalLoading(isLoading) {
+  const btn = document.getElementById("denicheurLaunchBtn");
+  if (!btn) return;
+  if (isLoading) {
+    btn.disabled = true;
+    btn.setAttribute("aria-busy", "true");
+    if (!btn.dataset.prevLabel) btn.dataset.prevLabel = btn.textContent.trim();
+    btn.textContent = "Recherche en cours...";
+  } else {
+    btn.disabled = false;
+    btn.removeAttribute("aria-busy");
+    if (btn.dataset.prevLabel) btn.textContent = btn.dataset.prevLabel;
+  }
+}
+
+function closeDenicheurModal() {
+  const modal = document.getElementById("denicheurModal");
+  if (!modal) return;
+  unlockDenicheurBackgroundScroll();
+  modal.classList.add("hidden");
+  modal.setAttribute("aria-hidden", "true");
+  const prev = denicheurPreviousFocus;
+  denicheurPreviousFocus = null;
+  if (prev && typeof prev.focus === "function" && document.body.contains(prev)) {
+    try {
+      prev.focus();
+    } catch {}
+  } else {
+    document.getElementById("denicheurLaunchBtn")?.focus();
+  }
 }
 
 function renderDenicheurModalContent(match, searchNote) {
   const mt = Math.round(minutesToStart(match));
   const prob = estimatedSuccessProbability(match);
-  const taux = Math.round(clamp(Number(match.finderScore || 0), 0, 100));
+  const taux = prudentDenicheurScore(match);
   const rel = Math.round(clamp(Number(match.reliabilityScore || 0), 0, 99));
   const marketHint = maxImpliedFavoritePercent(match);
+  const marketAdj = marketHint == null ? null : Math.round(marketHint * 0.84);
   const detailUrl = `/match.html?id=${encodeURIComponent(match.id)}`;
 
   return `
     <p class="denicheur-intro">Voici le match que le <strong>denicheur</strong> a choisi pour toi.</p>
+    <p class="denicheur-method">
+      <strong>Methode (prudente):</strong> fenetre ~10 min puis filtres sur <strong>fiabilite</strong> et <strong>cotes stables</strong>
+      (moins de mouvement). Le tri favorise la securite des donnees plutot que le rendement affiche. Les pourcentages sont
+      <strong>volontairement bas</strong> (marge bookmaker + incertitude) — aucun gain garanti.
+      ${isDenicheurFullOption() ? "<br /><strong>Option complete:</strong> criteres ultra stricts (liquidite + scores hauts + 1X2 fixes) au moment du clic." : ""}
+    </p>
     <p class="denicheur-search-note">${escapeHtml(searchNote)}</p>
     <div class="denicheur-match-block">
       <p class="denicheur-league">${escapeHtml(match.league || "Ligue")}</p>
@@ -289,42 +534,99 @@ function renderDenicheurModalContent(match, searchNote) {
     </div>
     <div class="denicheur-metrics">
       <div class="denicheur-metric">
-        <span class="denicheur-metric-label">Probabilite de succes estimee</span>
+        <span class="denicheur-metric-label">Probabilite de succes (conservatrice)</span>
         <strong class="denicheur-metric-value">${prob}%</strong>
-        <small class="denicheur-metric-hint">Combine marche (favori ~${marketHint != null ? `${marketHint}%` : "N/A"}) et score denicheur.</small>
+        <small class="denicheur-metric-hint">Favori marche brut ~${marketHint != null ? `${marketHint}%` : "N/A"}, ajuste ~${marketAdj != null ? `${marketAdj}%` : "N/A"} + penalite si cotes mouvantes.</small>
       </div>
       <div class="denicheur-metric">
-        <span class="denicheur-metric-label">Taux de succes / confiance denicheur</span>
+        <span class="denicheur-metric-label">Confiance prudente (denicheur)</span>
         <strong class="denicheur-metric-value denicheur-accent">${taux}%</strong>
-        <small class="denicheur-metric-hint">Indice de qualite du pick (fiabilite donnees ${rel}%).</small>
+        <small class="denicheur-metric-hint">Melange fiabilite ${rel}% et score interne, abaisse si volatilite 1X2.</small>
       </div>
     </div>
-    <p class="denicheur-disclaimer">Indicatif, pari responsable — rien n'est garanti.</p>
+    <p class="denicheur-disclaimer">Indicatif, pari responsable — rien n'est garanti. Reserve aux majeurs selon ta legislation.</p>
+    ${renderDenicheurHistoryHtml()}
     <a class="denicheur-detail-btn" href="${detailUrl}">Voir le detail predictions</a>
   `;
+}
+
+function focusDenicheurModal() {
+  const modal = document.getElementById("denicheurModal");
+  const closeBtn = document.getElementById("denicheurModalClose");
+  const card = modal?.querySelector(".denicheur-card");
+  const focusables = getFocusableElements(card);
+  if (focusables.length) {
+    (closeBtn && focusables.includes(closeBtn) ? closeBtn : focusables[0]).focus();
+  }
+}
+
+function onDenicheurModalKeydown(event) {
+  const modal = document.getElementById("denicheurModal");
+  if (!modal || modal.classList.contains("hidden")) return;
+  if (event.key === "Escape") {
+    event.preventDefault();
+    closeDenicheurModal();
+    return;
+  }
+  if (event.key !== "Tab") return;
+  const card = modal.querySelector(".denicheur-card");
+  const focusables = getFocusableElements(card);
+  if (focusables.length === 0) return;
+  const first = focusables[0];
+  const last = focusables[focusables.length - 1];
+  if (event.shiftKey) {
+    if (document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    }
+  } else if (document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
 }
 
 async function openDenicheurModal() {
   const modal = document.getElementById("denicheurModal");
   const body = document.getElementById("denicheurModalBody");
   if (!modal || !body) return;
+  denicheurPreviousFocus = document.activeElement;
+  setDenicheurModalLoading(true);
   modal.classList.remove("hidden");
   modal.setAttribute("aria-hidden", "false");
+  lockDenicheurBackgroundScroll();
   body.innerHTML = '<p class="denicheur-loading">Recherche en cours...</p>';
+  requestAnimationFrame(() => focusDenicheurModal());
 
   try {
     await loadMatches();
   } catch (error) {
     body.innerHTML = `<p class="denicheur-error">Impossible de charger les matchs: ${escapeHtml(error.message)}</p>`;
+    setDenicheurModalLoading(false);
+    requestAnimationFrame(() => focusDenicheurModal());
     return;
   }
 
   const { match, searchNote } = pickDenicheurMatch(allMatches);
   if (!match) {
     body.innerHTML = `<p class="denicheur-error">${escapeHtml(searchNote)} Actualise la page ou reessaie plus tard.</p>`;
+    setDenicheurModalLoading(false);
+    requestAnimationFrame(() => focusDenicheurModal());
     return;
   }
+
+  const prob = estimatedSuccessProbability(match);
+  const taux = prudentDenicheurScore(match);
+  pushDenicheurHistory({
+    id: match.id,
+    teamHome: match.teamHome,
+    teamAway: match.teamAway,
+    prob,
+    taux,
+  });
+
   body.innerHTML = renderDenicheurModalContent(match, searchNote);
+  setDenicheurModalLoading(false);
+  requestAnimationFrame(() => focusDenicheurModal());
 }
 
 function initDenicheurModal() {
@@ -333,18 +635,14 @@ function initDenicheurModal() {
   const closeBtn = document.getElementById("denicheurModalClose");
   if (!modal || !btn) return;
 
-  const close = () => {
-    modal.classList.add("hidden");
-    modal.setAttribute("aria-hidden", "true");
-  };
-
   btn.addEventListener("click", () => {
     openDenicheurModal();
   });
-  if (closeBtn) closeBtn.addEventListener("click", close);
+  if (closeBtn) closeBtn.addEventListener("click", () => closeDenicheurModal());
   modal.addEventListener("click", (event) => {
-    if (event.target === modal) close();
+    if (event.target === modal) closeDenicheurModal();
   });
+  document.addEventListener("keydown", onDenicheurModalKeydown);
 }
 
 function uniqueLeagues(matches) {
@@ -420,8 +718,8 @@ function createMatchCard(match, index) {
   const score = extractScore(match.score);
   const status = match.statusText || "A venir";
   const useFinder = currentMatchMode === "finder" && Number(match.finderScore || 0) > 0;
-  const quality = useFinder ? Number(match.finderScore || 0) : Number(match.reliabilityScore || 0);
-  const qualityLabel = useFinder ? "Denicheur" : "Qualite";
+  const quality = useFinder ? prudentDenicheurScore(match) : Number(match.reliabilityScore || 0);
+  const qualityLabel = useFinder ? "Prudent" : "Qualite";
   const qualityClass = quality >= 75 ? "quality-high" : quality >= 60 ? "quality-mid" : "quality-low";
 
   const detailLink = document.createElement("a");
@@ -621,9 +919,9 @@ function renderMatchFinder(matches) {
 
   const upcoming = (matches || []).filter((m) => classifyMatch(m) === "upcoming");
   const sorted = [...upcoming].sort((a, b) => {
-    const fa = Number(a.finderScore || 0);
-    const fb = Number(b.finderScore || 0);
-    if (fb !== fa) return fb - fa;
+    const ra = conservativeDenicheurRank(a);
+    const rb = conservativeDenicheurRank(b);
+    if (rb !== ra) return rb - ra;
     return Number(a.startTimeUnix || 0) - Number(b.startTimeUnix || 0);
   });
   const top = sorted.slice(0, 6);
@@ -639,8 +937,8 @@ function renderMatchFinder(matches) {
 
   grid.innerHTML = top
     .map((m, i) => {
-      const score = Number(m.finderScore || 0);
-      const sc = score >= 75 ? "finder-high" : score >= 60 ? "finder-mid" : "finder-low";
+      const score = prudentDenicheurScore(m);
+      const sc = score >= 68 ? "finder-high" : score >= 52 ? "finder-mid" : "finder-low";
       return `
       <article class="finder-row">
         <span class="finder-rank">#${i + 1}</span>
@@ -682,9 +980,9 @@ function renderMatches() {
     filtered = byLeague
       .filter((match) => classifyMatch(match) === "upcoming")
       .sort((a, b) => {
-        const fa = Number(a.finderScore || 0);
-        const fb = Number(b.finderScore || 0);
-        if (fb !== fa) return fb - fa;
+        const ra = conservativeDenicheurRank(a);
+        const rb = conservativeDenicheurRank(b);
+        if (rb !== ra) return rb - ra;
         return Number(a.startTimeUnix || 0) - Number(b.startTimeUnix || 0);
       });
   } else {
@@ -789,6 +1087,7 @@ setInterval(() => {
 }, 2300);
 initWelcomeModal();
 initDenicheurModal();
+initDenicheurFullOption();
 
 function registerHomeSiteControl() {
   window.SiteControl = {

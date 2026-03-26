@@ -1,4 +1,4 @@
-const CACHE_VERSION = "fc25-cache-v1";
+const CACHE_VERSION = "fc25-cache-v4";
 const ASSETS = [
   "/",
   "/index.html",

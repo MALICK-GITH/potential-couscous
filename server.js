@@ -1,4 +1,4 @@
-﻿const path = require("path");
+const path = require("path");
 require("dotenv").config({ path: path.join(__dirname, ".env") });
 const express = require("express");
 const sharp = require("sharp");
@@ -21,11 +21,34 @@ const MAX_PORT_TRIES = 20;
 const CHAT_RATE_LIMIT_WINDOW_MS = 60_000;
 const CHAT_RATE_LIMIT_MAX = 10;
 const chatRateState = new Map();
+const HEAVY_POST_WINDOW_MS = 60_000;
+const HEAVY_POST_MAX = 40;
+const heavyPostState = new Map();
+const SERVER_STARTED_AT = Date.now();
 const CHAT_IO_TIMEOUT_MS = 3500;
 const CHAT_PROVIDER_TIMEOUT_MS = 7000;
 
 app.use(express.static(path.join(__dirname, "public")));
 app.use(express.json());
+
+app.get("/health", (_req, res) => {
+  res.json({
+    ok: true,
+    uptimeSec: Math.floor((Date.now() - SERVER_STARTED_AT) / 1000),
+    startedAt: new Date(SERVER_STARTED_AT).toISOString(),
+  });
+});
+
+app.use((req, res, next) => {
+  if (req.method !== "POST" || !isHeavyPostPath(req.path)) return next();
+  if (!canUseHeavyPost(req)) {
+    return res.status(429).json({
+      success: false,
+      error: "Trop de requetes sur cette action. Reessaie dans environ une minute.",
+    });
+  }
+  next();
+});
 
 function withTimeout(promise, timeoutMs, fallbackValue = null) {
   return new Promise((resolve) => {
@@ -153,6 +176,31 @@ function canUseChat(req) {
   state.count += 1;
   chatRateState.set(key, state);
   return state.count <= CHAT_RATE_LIMIT_MAX;
+}
+
+function isHeavyPostPath(path = "") {
+  const p = String(path || "");
+  return (
+    p.includes("send-telegram") ||
+    p.includes("/coupon/pdf") ||
+    p.includes("/coupon/image") ||
+    p.includes("/pdf/coupon") ||
+    p.includes("/download/coupon") ||
+    p.includes("/coupon/print")
+  );
+}
+
+function canUseHeavyPost(req) {
+  const key = getClientKey(req);
+  const now = Date.now();
+  const state = heavyPostState.get(key) || { count: 0, resetAt: now + HEAVY_POST_WINDOW_MS };
+  if (now > state.resetAt) {
+    state.count = 0;
+    state.resetAt = now + HEAVY_POST_WINDOW_MS;
+  }
+  state.count += 1;
+  heavyPostState.set(key, state);
+  return state.count <= HEAVY_POST_MAX;
 }
 
 function localChatFallback(message, context = {}) {
@@ -2178,6 +2226,52 @@ async function requestAnthropicChat({ baseUrl, apiKey, model, systemPrompt, user
   throw new Error(errors.filter(Boolean).join(" | ") || "Erreur Anthropic");
 }
 
+async function requestOpenAICompatChat({ baseUrl, apiKey, model, systemPrompt, userPrompt }) {
+  const root = trimTrailingSlash(trimText(baseUrl || "", 500));
+  if (!root) throw new Error("base URL vide");
+  const url = `${root}/chat/completions`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 9000);
+  let response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        temperature: 0.5,
+        max_tokens: 800,
+      }),
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+  const parsed = await parseResponseSafe(response);
+  const raw = parsed.json;
+  if (!response.ok) {
+    const msg =
+      raw?.error?.message ||
+      (typeof raw?.error === "string" ? raw.error : null) ||
+      parsed.text.slice(0, 180) ||
+      `HTTP ${response.status}`;
+    throw new Error(msg);
+  }
+  if (!raw) throw new Error("reponse non-JSON");
+  const content = raw?.choices?.[0]?.message?.content;
+  if (content == null || String(content).trim() === "") {
+    throw new Error("reponse chat vide");
+  }
+  return { answer: String(content).trim(), model: raw?.model || model };
+}
+
 function buildSlokEndpointCandidates(baseUrl) {
   const base = trimTrailingSlash(baseUrl);
   const out = [];
@@ -2374,7 +2468,22 @@ app.post("/api/chat", async (req, res) => {
       trimText(process.env.ANTHROPIC_DEFAULT_OPUS_MODEL || "", 120) ||
       trimText(process.env.ANTHROPIC_DEFAULT_SONNET_MODEL || "", 120) ||
       "claude-opus-4-6";
+    const openaiCompatBaseUrl = trimText(
+      process.env.OPENAI_COMPAT_BASE_URL || process.env.THE_OLD_API_BASE_URL || "",
+      500
+    );
+    const openaiCompatKey = trimText(
+      process.env.OPENAI_COMPAT_API_KEY || process.env.THE_OLD_API_KEY || "",
+      500
+    );
+    const openaiCompatModel = trimText(
+      process.env.OPENAI_COMPAT_MODEL || process.env.THE_OLD_MODEL || "gpt-4o",
+      120
+    );
+    const openaiCompatFirst =
+      String(process.env.OPENAI_COMPAT_FIRST || process.env.THE_OLD_FIRST || "0").trim() === "1";
     const errors = [];
+    const attempted = [];
     const actions = deriveControlActions(message, {
       page,
       league,
@@ -2383,7 +2492,44 @@ app.post("/api/chat", async (req, res) => {
       pageSnapshot,
     });
 
+    const finishRemote = (provider, result) => {
+      let answer = result.answer;
+      if (isRefusalAnswer(answer) && !isSiteQuestion(message)) {
+        answer = localGeneralAnswer(message);
+      }
+      return res.json({
+        success: true,
+        provider,
+        model: result.model,
+        tried: [...attempted, provider],
+        answer,
+        actions,
+      });
+    };
+
+    if (openaiCompatFirst && openaiCompatBaseUrl && openaiCompatKey) {
+      attempted.push("openai-compat");
+      try {
+        const result = await withTimeout(
+          requestOpenAICompatChat({
+            baseUrl: openaiCompatBaseUrl,
+            apiKey: openaiCompatKey,
+            model: openaiCompatModel,
+            systemPrompt,
+            userPrompt,
+          }),
+          CHAT_PROVIDER_TIMEOUT_MS,
+          null
+        );
+        if (!result) throw new Error("Timeout provider OpenAI-compat.");
+        return finishRemote("openai-compat", result);
+      } catch (error) {
+        errors.push(`OpenAI-compat: ${error.message}`);
+      }
+    }
+
     if (anthropicBaseUrl && anthropicKey) {
+      attempted.push("anthropic");
       try {
         const result = await withTimeout(
           requestAnthropicChat({
@@ -2397,22 +2543,12 @@ app.post("/api/chat", async (req, res) => {
           null
         );
         if (!result) throw new Error("Timeout provider Anthropic.");
-        let answer = result.answer;
-        if (isRefusalAnswer(answer) && !isSiteQuestion(message)) {
-          answer = localGeneralAnswer(message);
-        }
-        return res.json({
-          success: true,
-          provider: "anthropic",
-          model: result.model,
-          tried: ["anthropic"],
-          answer,
-          actions,
-        });
+        return finishRemote("anthropic", result);
       } catch (error) {
         errors.push(`Anthropic: ${error.message}`);
       }
 
+      attempted.push("slok");
       try {
         const slokResult = await withTimeout(
           requestSlokChat({
@@ -2426,18 +2562,7 @@ app.post("/api/chat", async (req, res) => {
           null
         );
         if (!slokResult) throw new Error("Timeout provider Slok.");
-        let answer = slokResult.answer;
-        if (isRefusalAnswer(answer) && !isSiteQuestion(message)) {
-          answer = localGeneralAnswer(message);
-        }
-        return res.json({
-          success: true,
-          provider: "slok",
-          model: slokResult.model,
-          tried: ["anthropic", "slok"],
-          answer,
-          actions,
-        });
+        return finishRemote("slok", slokResult);
       } catch (error) {
         errors.push(`Slok: ${error.message}`);
       }
@@ -2445,11 +2570,33 @@ app.post("/api/chat", async (req, res) => {
       errors.push("Anthropic: configuration absente.");
     }
 
+    if (!openaiCompatFirst && openaiCompatBaseUrl && openaiCompatKey) {
+      attempted.push("openai-compat");
+      try {
+        const result = await withTimeout(
+          requestOpenAICompatChat({
+            baseUrl: openaiCompatBaseUrl,
+            apiKey: openaiCompatKey,
+            model: openaiCompatModel,
+            systemPrompt,
+            userPrompt,
+          }),
+          CHAT_PROVIDER_TIMEOUT_MS,
+          null
+        );
+        if (!result) throw new Error("Timeout provider OpenAI-compat.");
+        return finishRemote("openai-compat", result);
+      } catch (error) {
+        errors.push(`OpenAI-compat: ${error.message}`);
+      }
+    }
+
+    attempted.push("local-fallback");
     return res.json({
       success: true,
       provider: "local-fallback",
       model: "local-fallback",
-      tried: ["anthropic", "slok", "local-fallback"],
+      tried: attempted,
       answer: `${
         isSiteQuestion(message)
           ? localChatFallback(message, { page, league, matchId })
@@ -2492,10 +2639,32 @@ app.get("/api/chat", (_req, res) => {
     process.env.ANTHROPIC_DEFAULT_OPUS_MODEL ||
     process.env.ANTHROPIC_DEFAULT_SONNET_MODEL ||
     null;
+  const openaiCompatBase =
+    process.env.OPENAI_COMPAT_BASE_URL || process.env.THE_OLD_API_BASE_URL || null;
+  const openaiCompatKeyEnv =
+    process.env.OPENAI_COMPAT_API_KEY || process.env.THE_OLD_API_KEY || "";
+  const openaiCompatEnabled = Boolean(openaiCompatBase && openaiCompatKeyEnv);
+  const openaiCompatModel =
+    process.env.OPENAI_COMPAT_MODEL ||
+    process.env.THE_OLD_MODEL ||
+    (openaiCompatEnabled ? "gpt-4o" : null);
+  const openaiCompatFirst =
+    String(process.env.OPENAI_COMPAT_FIRST || process.env.THE_OLD_FIRST || "0").trim() === "1";
+  const priority = openaiCompatFirst
+    ? ["openai-compat", "anthropic", "slok", "local-fallback"]
+    : ["anthropic", "slok", "openai-compat", "local-fallback"];
   res.json({
     success: true,
     message: "Route chat active. Utilise POST /api/chat avec { message, context }.",
-    providerPriority: ["anthropic", "local-fallback"],
+    providerPriority: priority,
+    openaiCompat: {
+      enabled: openaiCompatEnabled,
+      model: openaiCompatModel,
+      baseUrl: openaiCompatBase,
+      first: openaiCompatFirst,
+      modelsListUrl:
+        process.env.OPENAI_COMPAT_MODELS_URL || process.env.THE_OLD_MODELS_URL || null,
+    },
     anthropic: {
       enabled: Boolean(
         process.env.ANTHROPIC_BASE_URL &&

@@ -3,7 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#0f1931" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#050508" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="manifest" href="/manifest.webmanifest" />
@@ -25,10 +26,19 @@
       <h1>SOLITFIFPRO225</h1>
       <p id="subTitle">Hub FIFA Virtuel - matchs live, details et exports.</p>
       <div class="denicheur-hero-row">
-        <button type="button" class="denicheur-cta" id="denicheurLaunchBtn">
-          Lancer le denicheur (match ~10 min)
-        </button>
-        <p class="denicheur-hero-hint">Recherche un match qui demarre vers 10 min, puis affiche scores et probabilites.</p>
+        <div class="denicheur-hero-actions">
+          <button type="button" class="denicheur-cta" id="denicheurLaunchBtn">
+            Lancer le denicheur (match ~10 min)
+          </button>
+          <label class="denicheur-full-option">
+            <input id="denicheurFullOption" type="checkbox" />
+            <span>Option complete — choisir au mieux (ultra strict, peut ne rien proposer)</span>
+          </label>
+        </div>
+        <p class="denicheur-hero-hint">
+          Sans l'option: recherche prudente avec assouplissements. Avec l'option: uniquement les matchs les plus propres
+          (fiabilite, liquidite, cotes stables).
+        </p>
       </div>
       <div class="controls">
         <button id="refreshBtn" type="button">Actualiser</button>
@@ -116,6 +126,10 @@
 
     <footer>
       <small id="updatedAt"></small>
+      <p class="legal-foot">
+        Informations et scores a titre indicatif. Paris interdits aux mineurs. Joue avec moderation.
+        <a href="/mode-emploi.html">Mode d'emploi</a>
+      </p>
       <div class="site-signature">Signe par <strong>SOLITAIRE HACK</strong></div>
     </footer>
 

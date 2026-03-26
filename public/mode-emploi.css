@@ -147,6 +147,14 @@ h1 {
   color: #b7d3f4;
 }
 
+.legal-foot {
+  margin: 0 0 0.5rem;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: rgba(180, 200, 230, 0.8);
+  max-width: 52ch;
+}
+
 .capture-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
