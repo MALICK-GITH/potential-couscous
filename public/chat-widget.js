@@ -170,7 +170,7 @@
     panel.className = "chat-panel chat-hidden";
     panel.innerHTML = `
       <div class="chat-head">
-        <span>SOLITAIRE AI</span>
+        <span>SOLITAIRE AI — controle site</span>
         <div class="chat-head-actions">
           <button type="button" class="chat-clear">Effacer</button>
           <button type="button" class="chat-close">X</button>
@@ -209,7 +209,10 @@
     }
 
     if (history.length === 0) {
-      push("ai", "Salut, je suis SOLITAIRE AI. Je peux t'aider pour les matchs, cotes et coupons.");
+      push(
+        "ai",
+        "Salut — SOLITAIRE AI. Je pilote avec toi le site (matchs, coupon, exports PNG/JPG, Telegram). Dis-moi ce que tu veux faire. Signe SOLITAIRE HACK."
+      );
     } else {
       render();
     }

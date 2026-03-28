@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=5.0, user-scalable=yes" />
-    <meta name="theme-color" content="#0f1931" />
+    <meta name="theme-color" content="#0a1628" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Coupon Generator" />
@@ -19,6 +19,7 @@
       href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Sora:wght@400;600;700&display=swap"
       rel="stylesheet"
     />
+    <link rel="stylesheet" href="/pages-luxe.css" />
     <link rel="stylesheet" href="/coupon.css" />
     <link rel="stylesheet" href="/coupon-mobile.css" />
     <link rel="stylesheet" href="/coupon-mobile-ui.css" />
@@ -142,6 +143,30 @@
           <span>Watchlist delta cote</span>
           <input id="watchDeltaInput" type="number" min="0.01" max="2" step="0.01" value="0.15" />
         </label>
+
+        <section class="panel export-luxe-panel" aria-labelledby="exportLuxeTitle">
+          <h3 id="exportLuxeTitle">Exports image — PNG &amp; JPG</h3>
+          <p class="export-luxe-tagline">
+            PNG : netteté maximale · JPG : léger pour réseaux &amp; Telegram. Les boutons Image / Premium / Story utilisent le format choisi.
+          </p>
+          <div class="format-toggle" role="group" aria-label="Format export image">
+            <label class="fmt-chip">
+              <input type="radio" name="couponImgFmt" value="png" checked />
+              <span>PNG HD</span>
+            </label>
+            <label class="fmt-chip">
+              <input type="radio" name="couponImgFmt" value="jpg" />
+              <span>JPG classique</span>
+            </label>
+          </div>
+          <div class="export-luxe-actions">
+            <button type="button" id="downloadImageDuoBtn" disabled title="Standard : les deux fichiers">Duo PNG + JPG</button>
+            <button type="button" id="copyCouponTextBtn" disabled>Copier le coupon</button>
+            <button type="button" id="resetCouponWorkspaceBtn" class="btn-reset-workspace">Réinitialiser l'espace</button>
+          </div>
+          <p class="export-luxe-sign">Signe <strong>SOLITAIRE HACK</strong></p>
+        </section>
+
         <div class="actions">
           <button id="generateBtn" type="button">Generer Coupon</button>
           <button id="generateLadderBtn" type="button">Coupon Ladder IA</button>

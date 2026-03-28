@@ -313,17 +313,18 @@ function localGeneralAnswer(message = "") {
 
 function buildSiteKnowledgeBlock() {
   return [
-    "BASE CONNAISSANCE SITE SOLITFIFPRO225 (TOUS FORMATS):",
+    "BASE CONNAISSANCE SITE SOLITFIFPRO225 (TOUS FORMATS) — Signe SOLITAIRE HACK:",
     "- Pages: / (matchs live), /match.html?id=... (detail match), /coupon.html (coupon builder), /mode-emploi.html (guide), /about.html (createur), /developpeur.html (contacts).",
     "- Donnees matchs: API 1xBet LiveFeed (FIFA virtuel global), tri ligue, statut match, cotes 1X2 et marches additionnels.",
     "- Couverture: FC 24, FC 25, et toutes les ligues/formats FIFA virtuels presentes sur le site.",
     "- Detail match: decision maitre, bots, top 3 recommandations, Neural Match Engine, alertes drift cotes.",
     "- Coupon: generation optimisee par risque (safe/balanced/aggressive), validation ticket, remplacement selections faibles.",
-    "- Exports: PDF coupon (resume/rapide/detaille), image coupon PNG/JPG, snap story JPG, image ticket match individuel.",
-    "- Telegram: envoi texte, image, pack (texte+image+PDF), signature SOLITAIRE HACK.",
+    "- Exports image: PNG (nettete) et JPG (leger) pour standard, premium et story; duo PNG+JPG en un flux; Telegram image suit le format choisi sur la page coupon.",
+    "- Exports: PDF coupon (resume/rapide/detaille), impression A4, rapport pro, journal performance.",
+    "- Telegram: envoi texte, image (PNG ou JPG selon UI), pack (texte+image+PDF), ladder.",
     "- Regle metier critique: aucun coupon garanti gagnant; filtrer de preference les matchs non demarres.",
-    "- IA: doit donner conseils prudents, concrets, orientes actions dans le site.",
-    "- Controle IA total: via action 'site_control' avec commandes de page (home/coupon/match).",
+    "- CONTROLE IA (priorite): le site t'envoie snapshot + liste d'actions disponibles. Tu orientes l'utilisateur et tu sais que le backend declenche des actions securisees (navigation, refresh, site_control) quand l'utilisateur formule une intention claire.",
+    "- Commandes reconnues (non exhaustif): accueil, page coupon, guide, actualise, image png/jpg, duo png jpg, copier coupon, reinitialiser coupon, generer/valider/telegram/pdf/story/premium, modes match (live, turbo, termines).",
   ].join("\n");
 }
 
@@ -345,6 +346,12 @@ function deriveControlActions(message, context = {}) {
   }
   if (text.includes("mode emploi") || text.includes("guide")) {
     actions.push({ type: "open_page", target: "/mode-emploi.html" });
+  }
+  if (text.includes("page createur") || text.includes("a propos") || text.includes("apropos")) {
+    actions.push({ type: "open_page", target: "/about.html" });
+  }
+  if (text.includes("developpeur") || text.includes("contact dev")) {
+    actions.push({ type: "open_page", target: "/developpeur.html" });
   }
   if (text.includes("refresh") || text.includes("actualise") || text.includes("rafraich")) {
     actions.push({ type: "refresh_page" });
@@ -477,9 +484,52 @@ function deriveControlActions(message, context = {}) {
     } else if (text.includes("low data off")) {
       actions.push({ type: "site_control", name: "set_low_data_mode", payload: { enabled: false } });
     }
-    if (text.includes("image coupon")) actions.push({ type: "site_control", name: "download_image" });
-    if (text.includes("image premium")) actions.push({ type: "site_control", name: "download_image_premium" });
-    if (text.includes("story")) actions.push({ type: "site_control", name: "download_story" });
+    const wantPng = text.includes("png");
+    const wantJpg = text.includes("jpg") || text.includes("jpeg");
+    if (text.includes("copie coupon") || text.includes("copier le coupon") || text.includes("copier coupon")) {
+      actions.push({ type: "site_control", name: "copy_coupon_text" });
+    }
+    if (
+      text.includes("reinitialise") ||
+      text.includes("reinitialiser") ||
+      text.includes("reset coupon") ||
+      text.includes("vider le coupon")
+    ) {
+      actions.push({ type: "site_control", name: "reset_coupon_workspace" });
+    }
+    if (
+      text.includes("duo") ||
+      text.includes("png et jpg") ||
+      text.includes("jpg et png") ||
+      text.includes("deux formats")
+    ) {
+      actions.push({ type: "site_control", name: "download_image_duo", payload: { mode: "default" } });
+    }
+    if (text.includes("premium") && wantPng) {
+      actions.push({ type: "site_control", name: "download_image", payload: { mode: "premium", format: "png" } });
+    } else if (text.includes("premium") && wantJpg) {
+      actions.push({ type: "site_control", name: "download_image", payload: { mode: "premium", format: "jpg" } });
+    } else if ((text.includes("story") || text.includes("snap")) && wantPng) {
+      actions.push({ type: "site_control", name: "download_image", payload: { mode: "story", format: "png" } });
+    } else if ((text.includes("story") || text.includes("snap")) && wantJpg) {
+      actions.push({ type: "site_control", name: "download_image", payload: { mode: "story", format: "jpg" } });
+    } else if (
+      (text.includes("image coupon") || text.includes("telecharge image") || (text.includes("export") && text.includes("image"))) &&
+      wantPng
+    ) {
+      actions.push({ type: "site_control", name: "download_image", payload: { mode: "default", format: "png" } });
+    } else if (
+      (text.includes("image coupon") || text.includes("telecharge image") || (text.includes("export") && text.includes("image"))) &&
+      wantJpg
+    ) {
+      actions.push({ type: "site_control", name: "download_image", payload: { mode: "default", format: "jpg" } });
+    } else if (text.includes("image coupon")) {
+      actions.push({ type: "site_control", name: "download_image" });
+    } else if (text.includes("image premium")) {
+      actions.push({ type: "site_control", name: "download_image_premium" });
+    } else if (text.includes("story") || text.includes("snap")) {
+      actions.push({ type: "site_control", name: "download_story" });
+    }
   }
 
   // Controle match detail
@@ -681,178 +731,239 @@ function escapeXml(text = "") {
     .replace(/'/g, "&#39;");
 }
 
+function truncateCouponLabel(text = "", max = 44) {
+  const s = String(text || "").trim();
+  if (s.length <= max) return s;
+  return `${s.slice(0, Math.max(0, max - 1))}…`;
+}
+
 function buildCouponImageSvg(payload = {}) {
   const coupon = Array.isArray(payload.coupon) ? payload.coupon : [];
   const summary = payload.summary || {};
-  const riskProfile = String(payload.riskProfile || "balanced");
+  const riskRaw = truncateCouponLabel(String(payload.riskProfile || "balanced"), 20);
   const picks = coupon.slice(0, 6);
   const count = Math.max(1, picks.length || 1);
-  const cardH = 216;
-  const gap = 16;
-  const headH = 160;
-  const footH = 48;
+  const cardH = 228;
+  const gap = 18;
+  const headH = 178;
+  const footH = 52;
   const width = 1200;
   const height = headH + footH + count * cardH + (count - 1) * gap;
   const generatedAt = formatDateTime(new Date());
+  const innerW = width - 72;
 
   const cards = picks.map((pick, i) => {
     const y = headH + i * (cardH + gap);
-    const league = escapeXml(pick.league || "Ligue virtuelle");
-    const home = escapeXml(pick.teamHome || "Equipe 1");
-    const away = escapeXml(pick.teamAway || "Equipe 2");
-    const pari = escapeXml(pick.pari || "-");
+    const league = escapeXml(truncateCouponLabel(pick.league || "Ligue virtuelle", 52));
+    const home = escapeXml(truncateCouponLabel(pick.teamHome || "Equipe 1", 22));
+    const away = escapeXml(truncateCouponLabel(pick.teamAway || "Equipe 2", 22));
+    const pari = escapeXml(truncateCouponLabel(pick.pari || "-", 64));
     const odd = formatOddForTelegram(pick.cote);
     const matchStart = escapeXml(formatMatchStartTimeUnix(pick.startTimeUnix));
+    const cx = innerW / 2;
     return `
       <g transform="translate(36, ${y})">
-        <rect x="0" y="0" width="${width - 72}" height="${cardH}" rx="14" fill="rgba(10,18,35,0.95)" stroke="rgba(116,161,214,0.36)"/>
-        <rect x="0" y="0" width="${width - 72}" height="40" rx="14" fill="rgba(27,57,102,0.55)" />
-        <text x="18" y="26" fill="#d7e8ff" font-size="15" font-weight="700">${i + 1}. ${league}</text>
-        <text x="${width - 120}" y="26" text-anchor="end" fill="#b7cced" font-size="13">Match: ${matchStart}</text>
-
-        <line x1="18" y1="56" x2="${width - 90}" y2="56" stroke="rgba(130,170,220,0.22)"/>
-        <text x="24" y="90" fill="#ffffff" font-size="30" font-weight="800">${home}</text>
-        <text x="${(width - 72) / 2}" y="90" text-anchor="middle" fill="#93b8f0" font-size="20" font-weight="700">VS</text>
-        <text x="${width - 96}" y="90" text-anchor="end" fill="#ffffff" font-size="30" font-weight="800">${away}</text>
-
-        <rect x="18" y="112" width="${width - 108}" height="84" rx="10" fill="rgba(7,13,25,0.82)" stroke="rgba(122,162,214,0.28)"/>
-        <text x="36" y="142" fill="#aac3e9" font-size="14">Pari</text>
-        <text x="36" y="166" fill="#f4f9ff" font-size="20" font-weight="700">${pari}</text>
-        <text x="${width - 170}" y="142" text-anchor="end" fill="#aac3e9" font-size="14">Cote</text>
-        <text x="${width - 170}" y="167" text-anchor="end" fill="#5bff9a" font-size="24" font-weight="800">${odd}</text>
-      </g>
-    `;
+        <rect x="0" y="0" width="${innerW}" height="${cardH}" rx="16" fill="rgba(8,12,22,0.94)" stroke="url(#imgStroke)" stroke-width="1.5"/>
+        <rect x="0" y="0" width="7" height="${cardH}" rx="4" fill="url(#imgAccent)"/>
+        <rect x="0" y="0" width="${innerW}" height="46" rx="16" fill="rgba(18,28,48,0.88)"/>
+        <line x1="14" y1="46" x2="${innerW - 14}" y2="46" stroke="rgba(0,240,255,0.2)"/>
+        <text x="20" y="30" fill="#9ecfff" font-size="14" font-weight="800" font-family="Segoe UI, Arial, sans-serif" letter-spacing="0.06em">${i + 1}. ${league}</text>
+        <text x="${innerW - 18}" y="30" text-anchor="end" fill="#7a8fb8" font-size="12" font-family="Segoe UI, Arial, sans-serif">${matchStart}</text>
+        <text x="24" y="96" fill="#ffffff" font-size="26" font-weight="900" font-family="Segoe UI, Arial, sans-serif">${home}</text>
+        <g transform="translate(${cx - 34}, 58)">
+          <polygon points="34,0 68,20 34,40 0,20" fill="rgba(0,240,255,0.12)" stroke="rgba(255,0,170,0.65)" stroke-width="2"/>
+          <text x="34" y="26" text-anchor="middle" fill="#00f0ff" font-size="17" font-weight="900" font-family="Segoe UI, Arial, sans-serif">VS</text>
+        </g>
+        <text x="${innerW - 24}" y="96" text-anchor="end" fill="#ffffff" font-size="26" font-weight="900" font-family="Segoe UI, Arial, sans-serif">${away}</text>
+        <rect x="16" y="118" width="${innerW - 32}" height="92" rx="12" fill="rgba(4,8,18,0.92)" stroke="rgba(123,44,255,0.35)"/>
+        <text x="32" y="148" fill="#8fa6c8" font-size="12" font-weight="700" font-family="Segoe UI, Arial, sans-serif" letter-spacing="0.12em">PARI ESPORTS</text>
+        <text x="32" y="176" fill="#eef4ff" font-size="18" font-weight="700" font-family="Segoe UI, Arial, sans-serif">${pari}</text>
+        <text x="${innerW - 32}" y="148" text-anchor="end" fill="#8fa6c8" font-size="12" font-weight="700" font-family="Segoe UI, Arial, sans-serif">COTE</text>
+        <text x="${innerW - 32}" y="182" text-anchor="end" fill="url(#imgOdd)" font-size="28" font-weight="900" font-family="Segoe UI, Arial, sans-serif">${odd}</text>
+      </g>`;
   });
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#061830"/>
-      <stop offset="60%" stop-color="#0e2d57"/>
-      <stop offset="100%" stop-color="#123663"/>
+    <linearGradient id="imgBg" x1="0" y1="0" x2="1.1" y2="1">
+      <stop offset="0%" stop-color="#050810"/>
+      <stop offset="45%" stop-color="#0c1528"/>
+      <stop offset="100%" stop-color="#120a20"/>
     </linearGradient>
-    <linearGradient id="head" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#16e3ff"/>
-      <stop offset="100%" stop-color="#7dffcf"/>
+    <radialGradient id="imgGlow" cx="18%" cy="12%" r="55%">
+      <stop offset="0%" stop-color="rgba(0,240,255,0.22)"/>
+      <stop offset="55%" stop-color="rgba(123,44,255,0.08)"/>
+      <stop offset="100%" stop-color="rgba(0,0,0,0)"/>
+    </radialGradient>
+    <radialGradient id="imgFloor" cx="50%" cy="100%" r="70%">
+      <stop offset="0%" stop-color="rgba(255,0,170,0.12)"/>
+      <stop offset="100%" stop-color="rgba(0,0,0,0)"/>
+    </radialGradient>
+    <linearGradient id="imgHead" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#00f0ff"/>
+      <stop offset="50%" stop-color="#ff00aa"/>
+      <stop offset="100%" stop-color="#7b2cff"/>
     </linearGradient>
+    <linearGradient id="imgAccent" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#00f0ff"/>
+      <stop offset="100%" stop-color="#ff00aa"/>
+    </linearGradient>
+    <linearGradient id="imgStroke" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="rgba(0,240,255,0.5)"/>
+      <stop offset="100%" stop-color="rgba(123,44,255,0.35)"/>
+    </linearGradient>
+    <linearGradient id="imgOdd" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#5dffa2"/>
+      <stop offset="100%" stop-color="#00f0ff"/>
+    </linearGradient>
+    <pattern id="imgMesh" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M0 48 L48 0 M-12 12 L12 -12 M36 60 L60 36" stroke="rgba(255,255,255,0.04)" stroke-width="1"/>
+    </pattern>
   </defs>
-  <rect x="0" y="0" width="${width}" height="${height}" fill="url(#bg)"/>
-  <rect x="28" y="20" width="${width - 56}" height="${headH - 30}" rx="18" fill="rgba(2,10,24,0.55)" stroke="rgba(125,255,207,0.35)" />
-  <text x="48" y="64" fill="url(#head)" font-size="32" font-weight="800" font-family="Arial, Helvetica, sans-serif">SOLITFIFPRO225 COUPON PRO</text>
-  <text x="48" y="92" fill="#d9ecff" font-size="18" font-family="Arial, Helvetica, sans-serif">Profil ${escapeXml(
-    riskProfile
-  )} | Selections ${Number(summary.totalSelections) || coupon.length} | Cote ${formatOddForTelegram(summary.combinedOdd)}</text>
-  <text x="48" y="118" fill="#b3cee6" font-size="14" font-family="Arial, Helvetica, sans-serif">Genere le ${escapeXml(
-    generatedAt
-  )}</text>
+  <rect width="${width}" height="${height}" fill="url(#imgBg)"/>
+  <rect width="${width}" height="${height}" fill="url(#imgGlow)"/>
+  <rect width="${width}" height="${height}" fill="url(#imgFloor)"/>
+  <rect width="${width}" height="${height}" fill="url(#imgMesh)" opacity="0.9"/>
+  <rect x="24" y="18" width="${width - 48}" height="${headH - 36}" rx="20" fill="rgba(6,10,22,0.75)" stroke="url(#imgStroke)" stroke-width="1.2"/>
+  <rect x="36" y="30" width="168" height="30" rx="8" fill="rgba(0,240,255,0.12)" stroke="rgba(0,240,255,0.45)"/>
+  <text x="48" y="51" fill="#00f0ff" font-size="13" font-weight="800" font-family="Segoe UI, Arial, sans-serif" letter-spacing="0.28em">FC ESPORTS</text>
+  <text x="48" y="96" fill="url(#imgHead)" font-size="34" font-weight="900" font-family="Segoe UI, Arial, sans-serif">SOLITFIFPRO225</text>
+  <text x="48" y="124" fill="#c5d6f0" font-size="17" font-family="Segoe UI, Arial, sans-serif">Ticket pro — Profil ${escapeXml(riskRaw)} · Sel. ${Number(summary.totalSelections) || coupon.length} · Combinée ${formatOddForTelegram(summary.combinedOdd)}</text>
+  <text x="48" y="148" fill="#7a8fb8" font-size="13" font-family="Segoe UI, Arial, sans-serif">Généré ${escapeXml(generatedAt)}</text>
   ${cards.join("\n")}
-  <text x="48" y="${height - 24}" fill="#cfe6ff" font-size="15" font-family="Arial, Helvetica, sans-serif">Signe: SOLITAIRE HACK</text>
+  <text x="48" y="${height - 26}" fill="#8fa1c4" font-size="14" font-family="Segoe UI, Arial, sans-serif">Signé SOLITAIRE HACK · Esports Virtual</text>
 </svg>`;
 }
 
 function buildCouponStorySvg(payload = {}) {
   const coupon = Array.isArray(payload.coupon) ? payload.coupon : [];
   const summary = payload.summary || {};
-  const riskProfile = String(payload.riskProfile || "balanced");
+  const riskRaw = truncateCouponLabel(String(payload.riskProfile || "balanced"), 18);
   const picks = coupon.slice(0, 5);
   const width = 1080;
   const height = 1920;
   const generatedAt = new Date().toLocaleString("fr-FR");
-  const cardW = width - 88;
-  const cardH = 256;
-  const startY = 280;
-  const gap = 24;
+  const cardW = width - 96;
+  const cardH = 268;
+  const startY = 300;
+  const gap = 22;
 
   const cards = picks.map((pick, i) => {
     const y = startY + i * (cardH + gap);
-    const home = escapeXml(pick.teamHome || "Equipe 1");
-    const away = escapeXml(pick.teamAway || "Equipe 2");
-    const league = escapeXml(pick.league || "Ligue virtuelle");
-    const pari = escapeXml(pick.pari || "-");
+    const home = escapeXml(truncateCouponLabel(pick.teamHome || "Equipe 1", 18));
+    const away = escapeXml(truncateCouponLabel(pick.teamAway || "Equipe 2", 18));
+    const league = escapeXml(truncateCouponLabel(pick.league || "Ligue", 28));
+    const pari = escapeXml(truncateCouponLabel(pick.pari || "-", 40));
     const odd = formatOddForTelegram(pick.cote);
     const conf = Number(pick.confiance) || 0;
     const risk = conf >= 75 ? "SAFE" : conf >= 60 ? "MODERE" : "RISQUE";
+    const mid = cardW / 2;
     return `
-      <g transform="translate(44, ${y})">
-        <rect x="0" y="0" width="${cardW}" height="${cardH}" rx="28" fill="rgba(8,18,34,0.90)" stroke="rgba(138,216,255,0.36)" />
-        <text x="28" y="42" fill="#b8dbff" font-size="26" font-weight="700">${i + 1}. ${league}</text>
-        <text x="${cardW / 2}" y="112" text-anchor="middle" fill="#f5fbff" font-size="42" font-weight="800">${home} VS ${away}</text>
-        <rect x="24" y="146" width="${cardW - 48}" height="78" rx="18" fill="rgba(14,25,48,0.95)" stroke="rgba(66,245,108,0.26)" />
-        <text x="40" y="176" fill="#d2e9ff" font-size="24">Pari: ${pari}</text>
-        <text x="40" y="206" fill="#7dffcf" font-size="26" font-weight="800">Cote ${odd}</text>
-        <text x="${cardW - 40}" y="206" text-anchor="end" fill="#ffd98a" font-size="24" font-weight="700">${conf}% | ${risk}</text>
-      </g>
-    `;
+      <g transform="translate(48, ${y})">
+        <rect x="0" y="0" width="${cardW}" height="${cardH}" rx="26" fill="rgba(6,10,20,0.92)" stroke="url(#stStroke)" stroke-width="2"/>
+        <rect x="0" y="0" width="8" height="${cardH}" rx="4" fill="url(#stAccent)"/>
+        <text x="24" y="44" fill="#00f0ff" font-size="22" font-weight="800" font-family="Segoe UI, Arial, sans-serif" letter-spacing="0.04em">${i + 1}. ${league}</text>
+        <text x="${mid}" y="118" text-anchor="middle" fill="#ffffff" font-size="36" font-weight="900" font-family="Segoe UI, Arial, sans-serif">${home}</text>
+        <g transform="translate(${mid - 40}, 128)">
+          <polygon points="40,0 80,24 40,48 0,24" fill="rgba(255,0,170,0.15)" stroke="#00f0ff" stroke-width="2.5"/>
+          <text x="40" y="32" text-anchor="middle" fill="#ff4ddb" font-size="20" font-weight="900" font-family="Segoe UI, Arial, sans-serif">VS</text>
+        </g>
+        <text x="${mid}" y="210" text-anchor="middle" fill="#ffffff" font-size="36" font-weight="900" font-family="Segoe UI, Arial, sans-serif">${away}</text>
+        <rect x="20" y="224" width="${cardW - 40}" height="36" rx="10" fill="rgba(0,240,255,0.08)" stroke="rgba(123,44,255,0.4)"/>
+        <text x="32" y="247" fill="#c8d9f5" font-size="18" font-weight="600" font-family="Segoe UI, Arial, sans-serif">${pari}</text>
+        <text x="${cardW - 32}" y="247" text-anchor="end" fill="url(#stOdd)" font-size="22" font-weight="900" font-family="Segoe UI, Arial, sans-serif">${odd}</text>
+        <text x="${cardW - 24}" y="44" text-anchor="end" fill="#ffc14d" font-size="20" font-weight="800" font-family="Segoe UI, Arial, sans-serif">${conf}% ${risk}</text>
+      </g>`;
   });
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
   <defs>
-    <linearGradient id="bgStory" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#071a32"/>
-      <stop offset="50%" stop-color="#0d2d58"/>
-      <stop offset="100%" stop-color="#18305b"/>
+    <linearGradient id="stBg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#030508"/>
+      <stop offset="40%" stop-color="#0a1428"/>
+      <stop offset="100%" stop-color="#180820"/>
     </linearGradient>
-    <linearGradient id="headStory" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#16e3ff"/>
-      <stop offset="100%" stop-color="#7dffcf"/>
+    <radialGradient id="stSpot" cx="50%" cy="0%" r="75%">
+      <stop offset="0%" stop-color="rgba(0,240,255,0.35)"/>
+      <stop offset="100%" stop-color="rgba(0,0,0,0)"/>
+    </radialGradient>
+    <linearGradient id="stTitle" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#00f0ff"/>
+      <stop offset="50%" stop-color="#ff00aa"/>
+      <stop offset="100%" stop-color="#c9ff3d"/>
+    </linearGradient>
+    <linearGradient id="stAccent" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ff00aa"/>
+      <stop offset="100%" stop-color="#7b2cff"/>
+    </linearGradient>
+    <linearGradient id="stStroke" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="rgba(0,240,255,0.55)"/>
+      <stop offset="100%" stop-color="rgba(255,0,170,0.4)"/>
+    </linearGradient>
+    <linearGradient id="stOdd" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#7dffb0"/>
+      <stop offset="100%" stop-color="#00f0ff"/>
     </linearGradient>
   </defs>
-  <rect x="0" y="0" width="${width}" height="${height}" fill="url(#bgStory)"/>
-  <rect x="36" y="58" width="${width - 72}" height="186" rx="30" fill="rgba(2,10,24,0.55)" stroke="rgba(125,255,207,0.35)" />
-  <text x="62" y="124" fill="url(#headStory)" font-size="54" font-weight="800" font-family="Arial, Helvetica, sans-serif">SOLITFIFPRO225 SNAP STORY</text>
-  <text x="62" y="168" fill="#d9ecff" font-size="30" font-family="Arial, Helvetica, sans-serif">Profil ${escapeXml(
-    riskProfile
-  )} | Selections ${Number(summary.totalSelections) || coupon.length}</text>
-  <text x="62" y="204" fill="#b3cee6" font-size="22" font-family="Arial, Helvetica, sans-serif">Cote ${formatOddForTelegram(
-    summary.combinedOdd
-  )} | ${escapeXml(generatedAt)}</text>
+  <rect width="${width}" height="${height}" fill="url(#stBg)"/>
+  <rect width="${width}" height="${height}" fill="url(#stSpot)"/>
+  <rect x="40" y="72" width="${width - 80}" height="200" rx="28" fill="rgba(8,12,24,0.82)" stroke="url(#stStroke)" stroke-width="1.5"/>
+  <text x="72" y="128" fill="url(#stTitle)" font-size="52" font-weight="900" font-family="Segoe UI, Arial, sans-serif">STORY ESPORTS</text>
+  <text x="72" y="168" fill="#00f0ff" font-size="22" font-weight="800" font-family="Segoe UI, Arial, sans-serif" letter-spacing="0.35em">SOLITFIFPRO225</text>
+  <text x="72" y="210" fill="#d5e4ff" font-size="26" font-family="Segoe UI, Arial, sans-serif">Profil ${escapeXml(riskRaw)} · ${Number(summary.totalSelections) || coupon.length} sélections</text>
+  <text x="72" y="246" fill="#8fa6c8" font-size="22" font-family="Segoe UI, Arial, sans-serif">Cote ${formatOddForTelegram(summary.combinedOdd)} · ${escapeXml(generatedAt)}</text>
   ${cards.join("\n")}
-  <text x="62" y="${height - 74}" fill="#cfe6ff" font-size="24" font-family="Arial, Helvetica, sans-serif">Signe: SOLITAIRE HACK</text>
-  <text x="62" y="${height - 40}" fill="#cfe6ff" font-size="18" font-family="Arial, Helvetica, sans-serif">Aucune combinaison n'est garantie gagnante.</text>
+  <text x="72" y="${height - 88}" fill="#a8b8d8" font-size="24" font-family="Segoe UI, Arial, sans-serif">Signé SOLITAIRE HACK</text>
+  <text x="72" y="${height - 52}" fill="#6a7a9a" font-size="18" font-family="Segoe UI, Arial, sans-serif">Aucune combinaison n'est garantie gagnante.</text>
 </svg>`;
 }
 
 function buildCouponPremiumSvg(payload = {}) {
   const coupon = Array.isArray(payload.coupon) ? payload.coupon : [];
   const summary = payload.summary || {};
-  const riskProfile = String(payload.riskProfile || "balanced");
+  const riskRaw = truncateCouponLabel(String(payload.riskProfile || "balanced"), 22);
   const picks = coupon.slice(0, 8);
   const count = Math.max(1, picks.length || 1);
   const width = 1400;
-  const headH = 190;
-  const cardH = 146;
-  const gap = 12;
-  const footH = 50;
+  const headH = 200;
+  const cardH = 152;
+  const gap = 14;
+  const footH = 54;
   const height = headH + footH + count * cardH + (count - 1) * gap;
   const generatedAt = formatDateTime(new Date());
+  const rowW = width - 64;
 
   const rows = picks
     .map((pick, idx) => {
       const y = headH + idx * (cardH + gap);
-      const home = escapeXml(pick.teamHome || "Equipe 1");
-      const away = escapeXml(pick.teamAway || "Equipe 2");
-      const league = escapeXml(pick.league || "Ligue virtuelle");
-      const bet = escapeXml(pick.pari || "-");
+      const home = escapeXml(truncateCouponLabel(pick.teamHome || "Equipe 1", 20));
+      const away = escapeXml(truncateCouponLabel(pick.teamAway || "Equipe 2", 20));
+      const league = escapeXml(truncateCouponLabel(pick.league || "Ligue virtuelle", 40));
+      const bet = escapeXml(truncateCouponLabel(pick.pari || "-", 48));
       const odd = formatOddForTelegram(pick.cote);
       const conf = Number(pick?.confiance || 0).toFixed(1);
       const startAt = escapeXml(formatMatchStartTimeUnix(pick.startTimeUnix));
       const q = Number(pick?.qualityScore || pick?.dataQuality || pick?.confiance || 0).toFixed(0);
+      const hx = rowW / 2;
       return `
       <g transform="translate(32, ${y})">
-        <rect x="0" y="0" width="${width - 64}" height="${cardH}" rx="14" fill="rgba(11,18,30,0.96)" stroke="rgba(152,198,255,0.28)"/>
-        <text x="18" y="28" fill="#9ec1ef" font-size="14" font-weight="700">${idx + 1}. ${league}</text>
-        <text x="${width - 108}" y="28" text-anchor="end" fill="#9ec1ef" font-size="13">Heure ${startAt}</text>
-        <text x="20" y="72" fill="#f4f9ff" font-size="28" font-weight="800">${home}</text>
-        <text x="${(width - 64) / 2}" y="72" text-anchor="middle" fill="#8fd3ff" font-size="18" font-weight="700">VS</text>
-        <text x="${width - 86}" y="72" text-anchor="end" fill="#f4f9ff" font-size="28" font-weight="800">${away}</text>
-
-        <rect x="18" y="88" width="${width - 100}" height="40" rx="9" fill="rgba(18,29,48,0.95)" stroke="rgba(124,177,240,0.25)"/>
-        <text x="28" y="113" fill="#d6e8ff" font-size="17" font-weight="700">${bet}</text>
-        <text x="${width - 120}" y="114" text-anchor="end" fill="#7dffcf" font-size="28" font-weight="900">${odd}</text>
-        <text x="${width - 56}" y="104" text-anchor="end" fill="#bad3f1" font-size="11">Conf</text>
-        <text x="${width - 56}" y="121" text-anchor="end" fill="#bad3f1" font-size="11">${conf}% | Q${q}</text>
+        <rect x="0" y="0" width="${rowW}" height="${cardH}" rx="14" fill="rgba(5,9,18,0.96)" stroke="url(#pmStroke)"/>
+        <rect x="0" y="0" width="6" height="${cardH}" rx="3" fill="url(#pmBar)"/>
+        <text x="16" y="28" fill="#8ab4ff" font-size="13" font-weight="800" font-family="Segoe UI, Arial, sans-serif" letter-spacing="0.08em">${idx + 1}. ${league}</text>
+        <text x="${rowW - 16}" y="28" text-anchor="end" fill="#6a7a98" font-size="12" font-family="Segoe UI, Arial, sans-serif">${startAt}</text>
+        <text x="18" y="76" fill="#ffffff" font-size="26" font-weight="900" font-family="Segoe UI, Arial, sans-serif">${home}</text>
+        <g transform="translate(${hx - 28}, 44)">
+          <rect x="0" y="0" width="56" height="28" rx="8" fill="rgba(0,240,255,0.12)" stroke="rgba(255,0,170,0.6)" stroke-width="1.5"/>
+          <text x="28" y="20" text-anchor="middle" fill="#00f0ff" font-size="15" font-weight="900" font-family="Segoe UI, Arial, sans-serif">VS</text>
+        </g>
+        <text x="${rowW - 18}" y="76" text-anchor="end" fill="#ffffff" font-size="26" font-weight="900" font-family="Segoe UI, Arial, sans-serif">${away}</text>
+        <rect x="14" y="92" width="${rowW - 28}" height="48" rx="10" fill="rgba(12,18,32,0.95)" stroke="rgba(123,44,255,0.3)"/>
+        <text x="26" y="118" fill="#dce6ff" font-size="16" font-weight="700" font-family="Segoe UI, Arial, sans-serif">${bet}</text>
+        <text x="${rowW - 120}" y="122" text-anchor="end" fill="url(#pmOdd)" font-size="26" font-weight="900" font-family="Segoe UI, Arial, sans-serif">${odd}</text>
+        <text x="${rowW - 22}" y="112" text-anchor="end" fill="#8899bb" font-size="10" font-family="Segoe UI, Arial, sans-serif">CONF</text>
+        <text x="${rowW - 22}" y="128" text-anchor="end" fill="#8899bb" font-size="10" font-family="Segoe UI, Arial, sans-serif">${conf}% · Q${q}</text>
       </g>`;
     })
     .join("\n");
@@ -860,27 +971,41 @@ function buildCouponPremiumSvg(payload = {}) {
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
   <defs>
-    <linearGradient id="premBg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#040b17"/>
-      <stop offset="48%" stop-color="#0b2448"/>
-      <stop offset="100%" stop-color="#0f335e"/>
+    <linearGradient id="pmBg" x1="0" y1="0" x2="1.1" y2="1">
+      <stop offset="0%" stop-color="#020408"/>
+      <stop offset="50%" stop-color="#0c1830"/>
+      <stop offset="100%" stop-color="#14081a"/>
     </linearGradient>
-    <linearGradient id="premHead" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#16e3ff"/>
-      <stop offset="100%" stop-color="#7dffcf"/>
+    <radialGradient id="pmLite" cx="80%" cy="15%" r="50%">
+      <stop offset="0%" stop-color="rgba(255,0,170,0.2)"/>
+      <stop offset="100%" stop-color="rgba(0,0,0,0)"/>
+    </radialGradient>
+    <linearGradient id="pmHead" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#00f0ff"/>
+      <stop offset="33%" stop-color="#ff00aa"/>
+      <stop offset="100%" stop-color="#7b2cff"/>
+    </linearGradient>
+    <linearGradient id="pmBar" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#00f0ff"/>
+      <stop offset="100%" stop-color="#7b2cff"/>
+    </linearGradient>
+    <linearGradient id="pmStroke" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="rgba(0,240,255,0.45)"/>
+      <stop offset="100%" stop-color="rgba(123,44,255,0.35)"/>
+    </linearGradient>
+    <linearGradient id="pmOdd" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#9fff6e"/>
+      <stop offset="100%" stop-color="#00f0ff"/>
     </linearGradient>
   </defs>
-  <rect x="0" y="0" width="${width}" height="${height}" fill="url(#premBg)"/>
-  <rect x="20" y="18" width="${width - 40}" height="${headH - 32}" rx="18" fill="rgba(5,13,24,0.72)" stroke="rgba(139,206,255,0.38)" />
-  <text x="40" y="64" fill="url(#premHead)" font-size="36" font-weight="900" font-family="Arial, Helvetica, sans-serif">SOLITFIFPRO225 PREMIUM TICKET</text>
-  <text x="40" y="98" fill="#d7e9ff" font-size="18" font-family="Arial, Helvetica, sans-serif">Profil ${escapeXml(
-    riskProfile
-  )} | Selections ${Number(summary.totalSelections) || coupon.length} | Cote combinee ${formatOddForTelegram(summary.combinedOdd)}</text>
-  <text x="40" y="126" fill="#b6cee7" font-size="14" font-family="Arial, Helvetica, sans-serif">Genere le ${escapeXml(
-    generatedAt
-  )} | Format ticket bookmaker lisible mobile + desktop</text>
+  <rect width="${width}" height="${height}" fill="url(#pmBg)"/>
+  <rect width="${width}" height="${height}" fill="url(#pmLite)"/>
+  <rect x="18" y="16" width="${width - 36}" height="${headH - 34}" rx="20" fill="rgba(6,10,22,0.78)" stroke="url(#pmStroke)" stroke-width="1.2"/>
+  <text x="40" y="58" fill="url(#pmHead)" font-size="38" font-weight="900" font-family="Segoe UI, Arial, sans-serif">PREMIUM ESPORTS TICKET</text>
+  <text x="40" y="92" fill="#d4e2ff" font-size="18" font-family="Segoe UI, Arial, sans-serif">SOLITFIFPRO225 · Profil ${escapeXml(riskRaw)} · ${Number(summary.totalSelections) || coupon.length} sel. · ${formatOddForTelegram(summary.combinedOdd)}</text>
+  <text x="40" y="120" fill="#7d8db0" font-size="14" font-family="Segoe UI, Arial, sans-serif">Généré ${escapeXml(generatedAt)} — rendu HD mobile &amp; desktop</text>
   ${rows}
-  <text x="40" y="${height - 20}" fill="#cfe6ff" font-size="14" font-family="Arial, Helvetica, sans-serif">Signe: SOLITAIRE HACK | Aucune combinaison n'est garantie gagnante.</text>
+  <text x="40" y="${height - 22}" fill="#8a9ab8" font-size="14" font-family="Segoe UI, Arial, sans-serif">Signé SOLITAIRE HACK — jeu responsable — combinaison non garantie</text>
 </svg>`;
 }
 
@@ -895,9 +1020,9 @@ function normalizeImageFormat(value, fallback = "png") {
 async function rasterizeSvg(svg, format = "png") {
   const buffer = Buffer.from(String(svg || ""), "utf8");
   if (format === "jpg") {
-    return sharp(buffer).jpeg({ quality: 92, mozjpeg: true }).toBuffer();
+    return sharp(buffer).jpeg({ quality: 94, mozjpeg: true, chromaSubsampling: "4:4:4" }).toBuffer();
   }
-  return sharp(buffer).png({ compressionLevel: 9 }).toBuffer();
+  return sharp(buffer).png({ compressionLevel: 9, adaptiveFiltering: true }).toBuffer();
 }
 
 function pdfEscape(text = "") {
@@ -2430,12 +2555,14 @@ app.post("/api/chat", async (req, res) => {
     const siteKnowledge = buildSiteKnowledgeBlock();
 
     const systemPrompt =
-      "Tu es SOLITAIRE AI, assistant integre au site FIFA Virtual Predictions (FC24, FC25 et autres formats FIFA virtuels du site). " +
-      "Reponds en francais, ton direct, concret et court (1 a 4 phrases). " +
-      "Reste centre sur le site: matchs, cotes, coupon, risque, validation ticket, exports, Telegram, navigation et actions de page. " +
-      "Si la question est hors sujet, recadre vers une action utile dans le site au lieu de deriver. " +
-      "Quand on te demande si tu vois la page, reponds OUI: tu vois l'etat temps reel transmis par le site (snapshot DOM), et donne 1-2 elements concrets vus. " +
-      "Tu ne promets jamais un gain garanti et tu proposes des options prudentes.\n\n" +
+      "Tu es SOLITAIRE AI, bras operationnel du site FIFA Virtual Predictions (SOLITFIFPRO225, signe SOLITAIRE HACK). " +
+      "Tu as la main sur les actions securisees exposees par le site (navigation, refresh, generation coupon, exports PNG/JPG, PDF, Telegram, reglages) via le mecanisme d'actions renvoye par le serveur. " +
+      "Reponds en francais, ton premium et clair (1 a 5 phrases). " +
+      "Priorite: guider vers une action concrete (bouton ou phrase declencheur) plutot que du blabla. " +
+      "Reste centre sur le site: matchs, cotes, coupon, risque, validation, exports PNG et JPG, Telegram, impression. " +
+      "Si la question derape, recadre vers une fonction du site. " +
+      "Quand on te demande si tu vois la page, reponds OUI et cite le snapshot (titres, selections, boutons). " +
+      "Tu ne promets jamais un gain garanti.\n\n" +
       siteKnowledge;
 
     const runtimeContext = await buildDynamicRuntimeContext({ page, league, matchId });

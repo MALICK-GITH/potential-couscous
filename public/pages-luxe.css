@@ -1,0 +1,84 @@
+/* Pages secondaires — rendu premium (PC / iOS / Android) — Signé SOLITAIRE HACK */
+
+:root {
+  --luxe-safe-t: env(safe-area-inset-top, 0px);
+  --luxe-safe-b: env(safe-area-inset-bottom, 0px);
+  --luxe-safe-x: max(env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px));
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  padding-top: var(--luxe-safe-t);
+  padding-bottom: var(--luxe-safe-b);
+  padding-left: var(--luxe-safe-x);
+  padding-right: var(--luxe-safe-x);
+}
+
+.page {
+  max-width: min(920px, 100%);
+  margin: 0 auto;
+}
+
+.page .hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: 22px;
+  box-shadow:
+    0 0 0 1px rgba(0, 240, 255, 0.12) inset,
+    0 24px 64px rgba(0, 0, 0, 0.45);
+}
+
+.page .hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(135deg, rgba(0, 240, 255, 0.06) 0%, transparent 42%, rgba(255, 0, 170, 0.05) 100%);
+  border-radius: inherit;
+}
+
+.page .panel {
+  border-radius: 18px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.page .panel:hover {
+  border-color: rgba(0, 240, 255, 0.22);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+}
+
+.site-signature,
+.luxe-signature {
+  margin-top: 2rem;
+  padding: 1rem 1.25rem;
+  text-align: center;
+  font-size: 0.82rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(200, 215, 245, 0.75);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.site-signature strong,
+.luxe-signature strong {
+  background: linear-gradient(90deg, #00f0ff, #ff4ddb, #c9ff3d);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.back,
+.back-link {
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.back:active,
+.back-link:active {
+  transform: scale(0.98);
+}

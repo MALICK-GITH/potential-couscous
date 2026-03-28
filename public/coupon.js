@@ -38,6 +38,26 @@ const COUPON_BANKROLL_KEY = "fc25_coupon_bankroll_v1";
 const COUPON_START_ALERT_KEY = "fc25_coupon_start_alert_v1";
 const COUPON_DRIFT_KEY = "fc25_coupon_drift_v1";
 const COUPON_WATCH_DELTA_KEY = "fc25_coupon_watch_delta_v1";
+const COUPON_IMAGE_FMT_KEY = "fc25_coupon_export_format_v1";
+
+function getCouponImageFormatPreference() {
+  const r = document.querySelector('input[name="couponImgFmt"]:checked');
+  if (r) return r.value === "jpg" ? "jpg" : "png";
+  const v = localStorage.getItem(COUPON_IMAGE_FMT_KEY);
+  return v === "jpg" ? "jpg" : "png";
+}
+
+function persistCouponImageFormat() {
+  const r = document.querySelector('input[name="couponImgFmt"]:checked');
+  if (r) localStorage.setItem(COUPON_IMAGE_FMT_KEY, r.value);
+}
+
+function hydrateCouponImageFormatRadios() {
+  const v = localStorage.getItem(COUPON_IMAGE_FMT_KEY) || "png";
+  document.querySelectorAll('input[name="couponImgFmt"]').forEach((el) => {
+    el.checked = el.value === v;
+  });
+}
 
 let pendingLeagueValue = null;
 const DEFAULT_PAGE_REFRESH_MINUTES = 5;
@@ -801,6 +821,8 @@ function updateSendButtonState() {
   const imageBtn = document.getElementById("downloadImageBtn");
   const premiumImageBtn = document.getElementById("downloadPremiumImageBtn");
   const storyBtn = document.getElementById("downloadStoryBtn");
+  const duoBtn = document.getElementById("downloadImageDuoBtn");
+  const copyTextBtn = document.getElementById("copyCouponTextBtn");
   const pdfQuickBtn = document.getElementById("downloadPdfQuickBtn");
   const pdfBtn = document.getElementById("downloadPdfBtn");
   const pdfDetailedBtn = document.getElementById("downloadPdfDetailedBtn");
@@ -822,6 +844,8 @@ function updateSendButtonState() {
   if (imageBtn) imageBtn.disabled = !enabled;
   if (premiumImageBtn) premiumImageBtn.disabled = !enabled;
   if (storyBtn) storyBtn.disabled = !enabled;
+  if (duoBtn) duoBtn.disabled = !enabled;
+  if (copyTextBtn) copyTextBtn.disabled = !enabled;
   if (pdfQuickBtn) pdfQuickBtn.disabled = !enabled;
   if (pdfBtn) pdfBtn.disabled = !enabled;
   if (pdfDetailedBtn) pdfDetailedBtn.disabled = !enabled;
@@ -1673,7 +1697,7 @@ async function sendCouponPackToTelegram() {
       riskProfile: lastCouponData.riskProfile || "balanced",
       insights,
       telegramConfidenceScore,
-      imageFormat: "png",
+      imageFormat: getCouponImageFormatPreference(),
       ticketShield: {
         driftThresholdPercent: getDriftThreshold(),
         replacedSelections: adapted.replaced,
@@ -2648,7 +2672,7 @@ async function sendCouponToTelegram(sendImage = false, mini = false) {
       telegramConfidenceScore,
       sendImage,
       mini: Boolean(mini && !sendImage),
-      imageFormat: sendImage ? "png" : "png",
+      imageFormat: sendImage ? getCouponImageFormatPreference() : "png",
       ticketShield: {
         driftThresholdPercent: getDriftThreshold(),
         replacedSelections: adapted.replaced,
@@ -2825,7 +2849,7 @@ async function fetchCouponImageBlob(mode = "default", format = "png") {
   return blob;
 }
 
-async function downloadCouponImage(mode = "default") {
+async function downloadCouponImage(mode = "default", forcedFormat) {
   const panel = document.getElementById("validation");
   if (!lastCouponData || !Array.isArray(lastCouponData.coupon) || lastCouponData.coupon.length === 0) {
     if (panel) panel.innerHTML = "<p>Genere d'abord un coupon avant image.</p>";
@@ -2833,7 +2857,8 @@ async function downloadCouponImage(mode = "default") {
   }
   try {
     await enforceTicketShield(mode === "story" ? "export story" : mode === "premium" ? "export image premium" : "export image");
-    const format = mode === "story" ? "jpg" : "png";
+    const format =
+      forcedFormat === "jpg" || forcedFormat === "png" ? forcedFormat : getCouponImageFormatPreference();
     const blob = await fetchCouponImageBlob(mode, format);
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -2866,6 +2891,59 @@ async function downloadCouponImage(mode = "default") {
     if (panel) panel.innerHTML = `<p>Erreur image: ${error.message}</p>`;
     pushAlert({ severity: "high", title: "Erreur image coupon", detail: error.message, type: "image_error" });
   }
+}
+
+async function downloadCouponImageDuo(mode = "default") {
+  await downloadCouponImage(mode, "png");
+  await new Promise((r) => setTimeout(r, 450));
+  await downloadCouponImage(mode, "jpg");
+}
+
+async function copyCouponToClipboard() {
+  const panel = document.getElementById("validation");
+  if (!lastCouponData || !Array.isArray(lastCouponData.coupon) || lastCouponData.coupon.length === 0) {
+    if (panel) panel.innerHTML = "<p>Genere d'abord un coupon avant copie.</p>";
+    return;
+  }
+  const s = lastCouponData.summary || {};
+  const lines = [
+    "SOLITFIFPRO225 | Signe SOLITAIRE HACK",
+    `Profil: ${lastCouponData.riskProfile || "balanced"} | Selections: ${s.totalSelections ?? lastCouponData.coupon.length} | Cote combinee: ${formatOdd(s.combinedOdd)}`,
+    "",
+  ];
+  lastCouponData.coupon.forEach((p, i) => {
+    lines.push(
+      `${i + 1}. ${p.teamHome || "?"} vs ${p.teamAway || "?"} | ${p.league || ""} | ${p.pari || "-"} @ ${formatOdd(p.cote)}`
+    );
+  });
+  lines.push("", "Aucune combinaison garantie. Jeu responsable.");
+  const text = lines.join("\n");
+  try {
+    await navigator.clipboard.writeText(text);
+    if (panel) {
+      panel.innerHTML = "<p>Coupon copie dans le presse-papiers (texte brut).</p>";
+    }
+    notifyEvent("Coupon", "Texte copie");
+    pushAlert({ severity: "low", title: "Copie OK", detail: "Coupon en texte dans le presse-papiers.", type: "copy_ok" });
+  } catch (e) {
+    if (panel) panel.innerHTML = `<p>Copie impossible: ${e.message}</p>`;
+  }
+}
+
+function resetCouponWorkspace() {
+  lastCouponData = null;
+  setResultHtml("<p>En attente de generation.</p>");
+  const v = document.getElementById("validation");
+  if (v) v.innerHTML = "<p>Validation ticket en attente.</p>";
+  renderHealthPanel([], "balanced", {});
+  updateSendButtonState();
+  notifyEvent("Coupon", "Espace reinitialise");
+  pushAlert({
+    severity: "low",
+    title: "Espace coupon",
+    detail: "Ticket courant efface. Tu peux regenerer.",
+    type: "reset_workspace",
+  });
 }
 
 async function generateCoupon() {
@@ -3352,6 +3430,18 @@ if (downloadPremiumImageBtn) {
 if (downloadStoryBtn) {
   downloadStoryBtn.addEventListener("click", () => downloadCouponImage("story"));
 }
+const downloadImageDuoBtn = document.getElementById("downloadImageDuoBtn");
+const copyCouponTextBtn = document.getElementById("copyCouponTextBtn");
+const resetCouponWorkspaceBtn = document.getElementById("resetCouponWorkspaceBtn");
+if (downloadImageDuoBtn) {
+  downloadImageDuoBtn.addEventListener("click", () => downloadCouponImageDuo("default"));
+}
+if (copyCouponTextBtn) {
+  copyCouponTextBtn.addEventListener("click", () => copyCouponToClipboard());
+}
+if (resetCouponWorkspaceBtn) {
+  resetCouponWorkspaceBtn.addEventListener("click", () => resetCouponWorkspace());
+}
 if (saveTicketABtn) {
   saveTicketABtn.addEventListener("click", () => {
     ticketSnapshotA = buildTicketSnapshot("A");
@@ -3449,6 +3539,10 @@ function applyPendingLeagueSelection() {
 async function initCouponPage() {
   applyStoredCouponFormValues();
   applyQueryOverrides();
+  hydrateCouponImageFormatRadios();
+  document.querySelectorAll('input[name="couponImgFmt"]').forEach((el) => {
+    el.addEventListener("change", persistCouponImageFormat);
+  });
 
   const refreshInput = document.getElementById("refreshMinutesCouponInput");
   if (refreshInput) {
@@ -3726,8 +3820,11 @@ function registerCouponSiteControl() {
       "analyze_journal",
       "replay_journal",
       "download_image",
+      "download_image_duo",
       "download_image_premium",
       "download_story",
+      "copy_coupon_text",
+      "reset_coupon_workspace",
       "download_pdf_quick",
       "download_pdf_summary",
       "download_pdf_detailed",
@@ -3765,9 +3862,21 @@ function registerCouponSiteControl() {
       if (action === "analyze_journal") return renderPerformanceJournal();
       if (action === "replay_journal") return renderPerformanceReplay();
       if (action === "build_watchlist") return buildWatchlistFromCoupon();
-      if (action === "download_image") return downloadCouponImage("default");
+      if (action === "download_image") {
+        const mode = String(payload?.mode || "default").toLowerCase();
+        const m = mode === "premium" ? "premium" : mode === "story" ? "story" : "default";
+        const fmt = payload?.format === "jpg" || payload?.format === "jpeg" ? "jpg" : payload?.format === "png" ? "png" : undefined;
+        return downloadCouponImage(m, fmt);
+      }
+      if (action === "download_image_duo") {
+        const mode = String(payload?.mode || "default").toLowerCase();
+        const m = mode === "premium" ? "premium" : "default";
+        return downloadCouponImageDuo(m);
+      }
       if (action === "download_image_premium") return downloadCouponImage("premium");
       if (action === "download_story") return downloadCouponImage("story");
+      if (action === "copy_coupon_text") return copyCouponToClipboard();
+      if (action === "reset_coupon_workspace") return resetCouponWorkspace();
       if (action === "download_pdf_quick") return downloadCouponPdf("quick");
       if (action === "download_pdf_summary") return downloadCouponPdf("summary");
       if (action === "download_pdf_detailed") return downloadCouponPdf("detailed");
