@@ -263,9 +263,9 @@
   margin-top: 1.5rem;
 }
 
-/* Enhanced Denicheur Modal */
+/* Enhanced Denicheur Modal — au-dessus du bandeau PWA (9999) */
 .denicheur-modal {
-  z-index: 1000;
+  z-index: 10050;
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
 }

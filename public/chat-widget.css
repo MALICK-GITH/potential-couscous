@@ -21,7 +21,8 @@
   position: fixed;
   right: 16px;
   bottom: calc(92px + env(safe-area-inset-bottom));
-  width: min(360px, calc(100vw - 22px));
+  width: min(360px, calc(100% - 22px));
+  height: min(520px, calc(100vh - 130px));
   height: min(520px, calc(100dvh - 130px));
   border: 1px solid rgba(114, 177, 255, 0.35);
   border-radius: 16px;
@@ -132,9 +133,12 @@
 
 @media (max-width: 560px) {
   .chat-panel {
+    left: 6px;
     right: 6px;
     bottom: calc(84px + env(safe-area-inset-bottom));
-    width: calc(100vw - 12px);
+    width: auto;
+    max-width: none;
+    height: min(70vh, 560px);
     height: min(70dvh, 560px);
   }
   .chat-fab {

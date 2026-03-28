@@ -39,21 +39,15 @@ class MobileViewportFix {
   }
 
   fixViewport() {
-    // Set proper viewport meta tag
-    const viewport = document.querySelector('meta[name="viewport"]');
-    if (viewport) {
-      viewport.setAttribute('content', 
-        'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover'
-      );
-    } else {
-      // Create viewport meta tag if not exists
+    // Ne pas ecraser la meta viewport du HTML : forcer maximum-scale=1 provoquait un rendu
+    // mal cadre sur certains iPhone (Safari ancien) et bloquait le zoom accessibilite.
+    if (!document.querySelector('meta[name="viewport"]')) {
       const meta = document.createElement('meta');
       meta.name = 'viewport';
-      meta.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover';
+      meta.content = 'width=device-width, initial-scale=1.0, viewport-fit=cover';
       document.head.appendChild(meta);
     }
-    
-    // Fix iOS Safari viewport height
+
     this.setViewportHeight();
   }
 
@@ -232,15 +226,6 @@ class MobileViewportFix {
         } else {
           document.body.classList.add('portrait');
           document.body.classList.remove('landscape');
-        }
-        
-        // Update viewport meta tag for landscape
-        const viewport = document.querySelector('meta[name="viewport"]');
-        if (viewport) {
-          const landscapeContent = isLandscape ? 
-            'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover' :
-            'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover';
-          viewport.setAttribute('content', landscapeContent);
         }
         
         console.log(`📱 Orientation changed to: ${isLandscape ? 'landscape' : 'portrait'}`);

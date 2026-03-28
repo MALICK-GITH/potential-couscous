@@ -42,6 +42,8 @@ html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
   scroll-behavior: smooth;
+  overflow-x: hidden;
+  width: 100%;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -53,7 +55,10 @@ html {
 body {
   margin: 0;
   padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
+  overflow-x: hidden;
+  max-width: 100%;
   min-height: 100vh;
+  min-height: -webkit-fill-available;
   min-height: 100dvh;
   font-family: var(--font-ui);
   color: var(--text);
@@ -240,7 +245,8 @@ h1 {
 }
 
 .denicheur-modal {
-  z-index: 70;
+  /* Au-dessus du bandeau PWA (.install-banner z-index 9999) et du chat */
+  z-index: 10050;
 }
 
 .denicheur-card {
@@ -450,6 +456,7 @@ h1 {
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
     min-height: 100vh;
+    min-height: -webkit-fill-available;
     min-height: 100dvh;
     box-sizing: border-box;
     overscroll-behavior: contain;
@@ -461,6 +468,7 @@ h1 {
     flex-direction: column;
     width: 100%;
     max-width: 100%;
+    max-height: min(92vh, calc(100vh - env(safe-area-inset-top, 0px) - 10px));
     max-height: min(92dvh, calc(100dvh - env(safe-area-inset-top, 0px) - 10px));
     margin: 0;
     border-radius: 22px 22px 0 0;
@@ -656,7 +664,8 @@ h1 {
 }
 
 .league-filter select {
-  min-width: 240px;
+  min-width: min(240px, 100%);
+  max-width: 100%;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: var(--radius-md);
   background: rgba(20, 20, 28, 0.65);
@@ -956,12 +965,15 @@ footer {
 
 .odd-alerts {
   position: fixed;
+  left: 14px;
   right: 14px;
   top: 14px;
   z-index: 9998;
   display: grid;
   gap: 0.45rem;
-  width: min(360px, calc(100vw - 26px));
+  width: auto;
+  max-width: 360px;
+  margin-left: auto;
   pointer-events: none;
 }
 
@@ -973,7 +985,7 @@ footer {
   display: grid;
   place-items: center;
   padding: 1.2rem;
-  z-index: 60;
+  z-index: 10050;
 }
 
 .welcome-card {
